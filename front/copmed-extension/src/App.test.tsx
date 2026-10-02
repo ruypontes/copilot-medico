@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
+import { API_URL, API_URL_KEY } from "./services/api";
 import { P1, P2, PACIENTE_SALVO, TOKEN, chamadasPara, fake, instalarFakes } from "./test/extensaoFake";
 
 // Testes de comportamento da extensão pela interface: a API e o chrome.storage são simulados,
@@ -16,6 +17,7 @@ afterEach(() => {
 });
 
 async function abrirComPacienteSalvo() {
+  Object.assign(fake.session, TOKEN);
   Object.assign(fake.store, PACIENTE_SALVO);
   const view = render(<App />);
   await screen.findByText("Paciente: Fulano Teste");
@@ -32,11 +34,12 @@ describe("sessão", () => {
   });
 
   it("token inválido é apagado e volta ao login com aviso", async () => {
-    Object.assign(fake.store, TOKEN);
+    Object.assign(fake.session, TOKEN);
     fake.authMeStatus = 401;
     render(<App />);
     await screen.findByText("Sessão expirada. Entre novamente.");
     expect(fake.chamadas[0]).toMatchObject({ method: "GET", path: "/api/auth/me", auth: "Bearer tok-salvo" });
+    expect(fake.session.copmed_extension_token).toBeUndefined();
     expect(fake.store.copmed_extension_token).toBeUndefined();
   });
 
@@ -53,7 +56,9 @@ describe("sessão", () => {
       password: "senha123",
       profile: "medico",
     });
-    expect(fake.store.copmed_extension_token).toBe("tok-novo");
+    // B27: o token fica em chrome.storage.session e nunca em disco (storage.local)
+    expect(fake.session.copmed_extension_token).toBe("tok-novo");
+    expect(fake.store.copmed_extension_token).toBeUndefined();
     await screen.findByText("Bem-vindo! Selecione ou crie um paciente para começar.");
     await waitFor(() => expect(chamadasPara("GET", "/api/all-patients")[0]?.auth).toBe("Bearer tok-novo"));
   });
@@ -71,7 +76,33 @@ describe("sessão", () => {
     await abrirComPacienteSalvo();
     fireEvent.click(screen.getByRole("button", { name: "Sair" }));
     await screen.findByRole("heading", { name: "Entrar" });
-    expect(fake.store).toEqual({});
+    expect(fake.session).toEqual({});
+    // sobra so o API_URL que o popup publica para o background.js (nao e dado de usuario)
+    expect(fake.store).toEqual({ [API_URL_KEY]: API_URL });
+  });
+
+  it("token antigo em storage.local é migrado para a sessão sem pedir novo login", async () => {
+    Object.assign(fake.store, TOKEN); // como deixado por versoes anteriores da extensao
+    render(<App />);
+    await screen.findByText("Bem-vindo! Selecione ou crie um paciente para começar.");
+    expect(fake.session.copmed_extension_token).toBe("tok-salvo");
+    expect(fake.store.copmed_extension_token).toBeUndefined();
+    expect(fake.chamadas[0]).toMatchObject({ path: "/api/auth/me", auth: "Bearer tok-salvo" });
+    // espera a lista de pacientes terminar: uma chamada em voo vazaria para o teste seguinte
+    await waitFor(() => expect(chamadasPara("GET", "/api/all-patients")).toHaveLength(1));
+    await waitFor(() => expect(screen.queryByText("Carregando...")).toBeNull());
+  });
+
+  it("401 em uma chamada do app (depois de validar a sessão) volta ao login com aviso", async () => {
+    Object.assign(fake.session, TOKEN);
+    fake.pacientesStatus = 401; // /api/auth/me valida, mas a API recusa a proxima chamada (token revogado)
+    render(<App />);
+
+    await screen.findByText("Sessão expirada. Entre novamente.");
+    await screen.findByRole("heading", { name: "Entrar" });
+    expect(fake.session).toEqual({});
+    expect(chamadasPara("GET", "/api/auth/me")).toHaveLength(1);
+    expect(chamadasPara("GET", "/api/all-patients")).toHaveLength(1);
   });
 });
 
@@ -129,7 +160,7 @@ describe("pacientes e consultas", () => {
   });
 
   it("cria paciente pelo modal e seleciona a primeira consulta", async () => {
-    Object.assign(fake.store, TOKEN);
+    Object.assign(fake.session, TOKEN);
     const { container } = render(<App />);
     await screen.findByText("Bem-vindo! Selecione ou crie um paciente para começar.");
     fireEvent.click(container.querySelector(".patient-controls button")!);
