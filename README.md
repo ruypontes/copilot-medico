@@ -70,7 +70,15 @@ AUTH_BOOTSTRAP_PASSWORD=<senha forte>
 CORS_ORIGINS=http://localhost:5174
 ```
 
-Sem `AUTH_SECRET_KEY` toda rota autenticada responde 500; sem `AUTH_BOOTSTRAP_*` nenhum administrador é criado e ninguém consegue entrar (D‑22/D‑23). O arquivo está no `.gitignore`; nunca commitar. Os modelos Vosk (`API/backend/vosk-model-small-pt-0.3` e `vosk-model-spk-0.4`) ainda vêm no repositório; a Sprint 1 os move para download por script (B13).
+Sem `AUTH_SECRET_KEY` toda rota autenticada responde 401; sem `AUTH_BOOTSTRAP_*` nenhum administrador é criado e ninguém consegue entrar (D‑22/D‑23). O arquivo está no `.gitignore`; nunca commitar. Os modelos Vosk (`API/backend/vosk-model-small-pt-0.3` e `vosk-model-spk-0.4`) ainda vêm no repositório; a Sprint 1 os move para download por script (B13).
+
+Para criar ou verificar o administrador inicial, com `AUTH_BOOTSTRAP_EMAIL` e `AUTH_BOOTSTRAP_PASSWORD` configurados, execute a partir da raiz do projeto:
+
+```bash
+python .\API\bootstrap_admin.py
+```
+
+O script n?o cria um usu?rio duplicado caso o administrador informado j? exista.
 
 ```bash
 python server.py
