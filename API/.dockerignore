@@ -14,3 +14,4 @@ backend/vosk-model-*/
 
 # Banco local do desenvolvedor nao deve vazar para a imagem.
 backend/patients_db.json
+*.db
