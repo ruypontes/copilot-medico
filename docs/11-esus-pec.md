@@ -100,7 +100,7 @@ docker logs -f esus
 
 Depois acesse http://localhost:8081.
 
-A porta 8080 do host fica com o `copmed-web` do `docker-compose.yml`, por isso
+A porta 8080 do host já é usada pelo frontend web do `docker-compose.yml`, por isso
 o PEC usa a 8081 (a porta interna do container continua 8080).
 
 ### Primeiro acesso: assistente de instalação

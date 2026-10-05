@@ -99,11 +99,8 @@ def current_user_is_doctor():
     return getattr(g, "current_profile", "") == "medico"
 
 
-def patient_belongs_to_current_user(patient_id, patient_data=None):
-    # `patient_data` evita uma segunda leitura+parse do patients_db.json
-    # quando quem chama ja carregou o registro.
-    if patient_data is None:
-        patient_data = get_patient_data(patient_id)
+def patient_belongs_to_current_user(patient_id):
+    patient_data = get_patient_data(patient_id)
     if not patient_data:
         return False
     if current_user_is_admin():
@@ -117,7 +114,7 @@ def require_patient_access(patient_id):
     patient_data = get_patient_data(patient_id)
     if not patient_data:
         return None, _json_error("Paciente nao encontrado.", 404)
-    if not patient_belongs_to_current_user(patient_id, patient_data):
+    if not patient_belongs_to_current_user(patient_id):
         return None, _json_error("Acesso negado ao paciente.", 403)
     return patient_data, None
 
@@ -214,22 +211,6 @@ def _format_extension_extracted_data(extracted_content, source_url=None):
         lines.append(str(extracted_content))
 
     return "\n".join(lines)
-
-
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """
-    Liveness/readiness sem autenticacao, consumido pelo HEALTHCHECK do Docker
-    e pelo `depends_on: service_healthy` do compose (B12).
-
-    Reporta tambem se a diarizacao subiu: os modelos Vosk sao baixados no build
-    (B13) e sua ausencia degrada o servico sem derrubar o processo.
-    """
-    return jsonify({
-        "status": "success",
-        "service": "copilot-medico-api",
-        "diarizer_loaded": audio_processor is not None,
-    }), 200
 
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -534,7 +515,7 @@ def check_patient_exists_api(patient_id):
     try:
         patient_data = get_patient_data(patient_id) 
         exists = patient_data is not None
-        if exists and not patient_belongs_to_current_user(patient_id, patient_data):
+        if exists and not patient_belongs_to_current_user(patient_id):
             return _json_error("Acesso negado ao paciente.", 403)
         return jsonify({"status": "success", "exists": exists}), 200
     except Exception as e:
@@ -1010,80 +991,4 @@ def handle_recommendations():
 if __name__ == '__main__':
     print("Servidor Flask com Gemini e DB de Paciente iniciado.")
     
-    # GARANTA que a função add_consultation_to_patient no patient_db.py tem a assinatura:
-    # def add_consultation_to_patient(patient_id: str, consultation_title: str = None, consultation_date: str = None, initial_history: list[dict] = None):
-    # para que o argumento 'initial_history' seja reconhecido.
-
-    # Garante que o paciente "João Silva" exista
-    ensure_patient_exists("paciente_abc", "João Silva")
-    
-    # --- PRÉ-POPULAÇÃO DE DADOS CORRIGIDA ---
-    # Histórico para a primeira consulta pré-populada
-    history_consulta_1 = [
-        {
-            "role": "user",
-            "parts": [
-                {
-                    "text": "Paciente relatou dor de cabeça severa há 2 dias."
-                }
-            ],
-            "timestamp": datetime.now().isoformat()
-        },
-        {
-            "role": "model",
-            "parts": [
-                {
-                    "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
-                }
-            ],
-            "timestamp": datetime.now().isoformat()
-        },
-        {
-            "role": "user",
-            "parts": [
-                {
-                    "text": "Nível 8, latejante."
-                }
-            ],
-            "timestamp": datetime.now().isoformat()
-        }
-    ]
-    
-    # Cria a primeira consulta já com o histórico completo
-    id_consulta_1 = add_consultation_to_patient(
-        "paciente_abc", 
-        "Consulta Antiga 1 (Dor de Cabeça)", 
-        initial_history=history_consulta_1 # Passando o histórico inicial aqui
-    )
-
-    # Histórico para a segunda consulta pré-populada
-    history_consulta_2 = [
-        {
-            "role": "user",
-            "parts": [
-                {
-                    "text": "Febre de 39°C e tosse seca persistente."
-                }
-            ],
-            "timestamp": datetime.now().isoformat()
-        },
-        {
-            "role": "model",
-            "parts": [
-                {
-                    "text": "Há quanto tempo os sintomas estão presentes?"
-                }
-            ],
-            "timestamp": datetime.now().isoformat()
-        }
-    ]
-
-    # Cria a segunda consulta já com o histórico completo
-    id_consulta_2 = add_consultation_to_patient(
-        "paciente_abc", 
-        "Consulta Antiga 2 (Febre)", 
-        initial_history=history_consulta_2 # Passando o histórico inicial aqui
-    )
-    # --- FIM DA PRÉ-POPULAÇÃO DE DADOS CORRIGIDA ---
-
     app.run(host='0.0.0.0', port=3001, debug=True)

@@ -1,4 +1,5 @@
 import types
+import importlib
 import sys
 
 
@@ -20,12 +21,11 @@ def make_fake_pypdf2():
     return mod
 
 
-def test_extract_text_from_pdf(monkeypatch, real_module):
-    # Injeta um PyPDF2 falso ANTES de carregar o modulo real.
+def test_extract_text_from_pdf(monkeypatch):
+    # Monkeypatch PyPDF2 before importing module
     monkeypatch.setitem(sys.modules, "PyPDF2", make_fake_pypdf2())
-    # `real_module` tira backend.pdf_reader de tras do stub da sessao e o
-    # devolve depois do teste (ver conftest.py).
-    mod = real_module("backend.pdf_reader")
+    mod = importlib.import_module("backend.pdf_reader")
+    importlib.reload(mod)
 
     class DummyUpload:
         def __init__(self):
