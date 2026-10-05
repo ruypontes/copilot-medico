@@ -15,9 +15,11 @@ Dois problemas historicos sao resolvidos aqui:
 from __future__ import annotations
 
 import importlib
+import os
 import pathlib
 import sys
 import types
+import uuid
 
 import pytest
 
@@ -233,30 +235,57 @@ def env_for_config(monkeypatch):
     yield
 
 
-@pytest.fixture()
-def temp_db_file(tmp_path, monkeypatch):
-    """
-    Redireciona o banco JSON de pacientes para um arquivo temporario por teste.
-
-    Evita que a suite leia ou sobrescreva o backend/patients_db.json real.
-    """
-    from backend import patient_db
-
-    temp_file = tmp_path / "patients_db_test.json"
-    if temp_file.exists():
-        temp_file.unlink()
-    monkeypatch.setattr(patient_db, "DB_FILE", str(temp_file), raising=True)
-    return str(temp_file)
+# Usuario falso devolvido por `auth_headers`. Existe de verdade na tabela
+# `medico` do banco de teste porque paciente/consulta tem FK para ele (B20).
+TEST_USER_ID = "00000000-0000-4000-8000-000000000001"
 
 
 @pytest.fixture()
-def temp_users_db(tmp_path, monkeypatch):
-    """Isola tambem a base de usuarios, usada pelo bootstrap do admin."""
-    from backend import auth_service
+def temp_db_file(tmp_path):
+    """
+    Banco SQLite temporario por teste, com o esquema dos modelos (B19) e o
+    usuario de teste cadastrado. Devolve a URL do banco.
 
-    users_file = tmp_path / "users_db_test.json"
-    monkeypatch.setattr(auth_service, "USERS_DB_FILE", str(users_file), raising=True)
-    return str(users_file)
+    Mantem o nome da era do patients_db.json para nao quebrar quem ja usa a
+    fixture; agora e o banco relacional inteiro (pacientes e usuarios).
+
+    Com TEST_DATABASE_URL (opcional) a suite roda em outro banco, ex.: um
+    PostgreSQL SEPARADO - as tabelas sao apagadas antes e depois de cada teste.
+    """
+    from models import Base, Medico, StatusAprovacao
+    from repositories import sessao
+
+    url = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{(tmp_path / 'copmed_test.db').as_posix()}"
+    engine = sessao.configurar(url)
+    externo = not url.startswith("sqlite")
+    if externo:
+        Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+
+    s = sessao.obter_sessao()
+    s.add(Medico(
+        id=uuid.UUID(TEST_USER_ID),
+        email="doctor@example.com",
+        senha_hash="!",
+        nome="Doctor Test",
+        perfis=["administrador", "medico"],
+        status_aprovacao=StatusAprovacao.APROVADO,
+    ))
+    s.commit()
+    sessao.encerrar_sessao()
+
+    yield url
+    if externo:
+        sessao.encerrar_sessao()
+        Base.metadata.drop_all(engine)
+    sessao.descartar()
+
+
+@pytest.fixture()
+def temp_users_db(temp_db_file):
+    """Usuarios agora ficam no mesmo banco (tabela `medico`); alias de
+    `temp_db_file` mantido por compatibilidade."""
+    return temp_db_file
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +312,7 @@ TEST_TOKEN = "test-valid-token"
 
 def _fake_user(profile: str) -> dict:
     return {
-        "id": "user-test-1",
+        "id": TEST_USER_ID,
         "email": "doctor@example.com",
         "name": "Doctor Test",
         "profiles": [profile],
@@ -354,7 +383,7 @@ def auth_client(flask_app, auth_headers):
     O perfil administrador e proposital: `patient_belongs_to_current_user`
     libera qualquer paciente para admin, enquanto `medico` so enxerga pacientes
     cujo `doctor_id` seja o seu. Como a maioria dos testes cria pacientes
-    direto via patient_db (sem doctor_id), usar `medico` devolveria 403 - o
+    direto pelo repositorio (sem medico), usar `medico` devolveria 403 - o
     mesmo sintoma da D-24.
     """
     return _AuthenticatedClient(flask_app.test_client(), auth_headers("administrador"))

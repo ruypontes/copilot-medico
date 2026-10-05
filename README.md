@@ -72,17 +72,16 @@ Sobe três serviços:
 | `backend` | http://localhost:3001 | API Flask (`/api/health` para checagem) |
 | `db` | localhost:5432 | PostgreSQL |
 
-> **Nota sobre o PostgreSQL:** o banco já sobe e o esquema relacional já
-> existe (B19: modelos em `API/models/`, migrações Alembic em
-> `API/migrations/`), mas a aplicação ainda grava no arquivo JSON
-> `backend/patients_db.json` — as rotas passam a usar o banco no B20 e os dados
-> do JSON são copiados no B21. Para criar as tabelas:
+> **Banco de dados:** pacientes, consultas, mensagens, transcrições, dados da
+> extensão e usuários ficam no PostgreSQL (B19: modelos em `API/models/` e
+> migrações Alembic em `API/migrations/`; B20: repositórios em
+> `API/repositories/`). O backend aplica as migrações sozinho ao iniciar
+> (`alembic upgrade head`).
 >
-> ```bash
-> docker compose exec backend alembic upgrade head
-> ```
-
-Os dados JSON ficam no volume `backend_data`, então sobrevivem a `--build`.
+> **Dados antigos:** o que estava em `patients_db.json` / `users_db.json`
+> **não aparece** até o B21 copiar esses arquivos para o banco. Eles continuam
+> no volume `backend_data`, intactos. Até lá, o admin inicial é recriado a
+> partir de `AUTH_BOOTSTRAP_*` no `API/.env`.
 
 ### Extensão Chrome
 
@@ -157,6 +156,15 @@ migração no fim e apagaria as tabelas do banco de desenvolvimento):
 ```bash
 docker compose exec db createdb -U copmed copmed_test
 TEST_POSTGRES_URL=postgresql+psycopg://copmed:<senha>@localhost:5432/copmed_test pytest tests/test_migracoes.py
+```
+
+A suíte inteira (rotas e repositórios) roda em SQLite por padrão. Para rodá-la
+no PostgreSQL, aponte `TEST_DATABASE_URL` para outro banco separado (as
+tabelas são apagadas antes e depois de cada teste):
+
+```bash
+docker compose exec db createdb -U copmed copmed_suite
+TEST_DATABASE_URL=postgresql+psycopg://copmed:<senha>@localhost:5432/copmed_suite pytest
 ```
 
 Ao mudar um modelo em `API/models/`, gere a migração e confira:

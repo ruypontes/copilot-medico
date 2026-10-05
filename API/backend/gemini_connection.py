@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
-from . import patient_db # Usando import relativo
+from repositories import MensagemRepository, sessao
 
 load_dotenv()
 
@@ -43,12 +43,11 @@ SAFETY_SETTINGS = {
 def send_message(patient_id: str, consultation_id: str, message_text: str) -> str:
     """
     Envia uma mensagem para uma sessão de chat Gemini específica da consulta e retorna a resposta.
-    O histórico é carregado do patient_db para a consulta específica e formatado para a API Gemini.
+    O histórico da consulta vem do banco (MensagemRepository) e é formatado para a API Gemini.
     """
     try:
-        # 1. Carregar histórico da consulta específica do nosso banco de dados JSON
-        # AGORA USAMOS get_consultation_chat_history
-        history_from_db = patient_db.get_consultation_chat_history(patient_id, consultation_id)
+        # 1. Carregar histórico da consulta específica do banco
+        history_from_db = MensagemRepository(sessao.obter_sessao()).historico(consultation_id)
 
         # 2. Formatar o histórico para a API Gemini.
         gemini_formatted_history = []

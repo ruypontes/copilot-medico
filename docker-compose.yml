@@ -45,8 +45,9 @@ services:
     env_file:
       - ./API/.env
     environment:
-      # Aponta os bancos JSON para o volume, senao os dados se perdem a cada
-      # `docker compose build`. Some quando a migracao para Postgres ocorrer.
+      # Os dados agora ficam no Postgres (B20). Os JSON antigos continuam no
+      # volume so para o script de migracao do B21 le-los; depois disso estas
+      # variaveis e o volume saem.
       PATIENTS_DB_FILE: /app/data/patients_db.json
       AUTH_USERS_DB_FILE: /app/data/users_db.json
     ports:
