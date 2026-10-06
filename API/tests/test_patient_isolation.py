@@ -1,5 +1,7 @@
 from io import BytesIO
 
+from ids import DOCTOR_A, DOCTOR_B
+
 def _auth_headers(monkeypatch, user_id, profile="medico"):
     from backend import auth_decorators
 
@@ -42,7 +44,7 @@ def test_doctor_patient_isolation(client, monkeypatch):
     # 1. Médico A cria o próprio paciente
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/patients",
@@ -55,13 +57,13 @@ def test_doctor_patient_isolation(client, monkeypatch):
     patient_a = response.get_json()
     patient_a_id = patient_a["patient_id"]
 
-    assert patient_a["doctor_id"] == "doctor-A"
+    assert patient_a["doctor_id"] == DOCTOR_A
 
     # ============================================================
     # 2. Médico B cria o próprio paciente
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/patients",
@@ -74,13 +76,13 @@ def test_doctor_patient_isolation(client, monkeypatch):
     patient_b = response.get_json()
     patient_b_id = patient_b["patient_id"]
 
-    assert patient_b["doctor_id"] == "doctor-B"
+    assert patient_b["doctor_id"] == DOCTOR_B
 
     # ============================================================
     # 3. Médico A pode acessar o próprio paciente
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.get(
         f"/api/patient-exists/{patient_a_id}",
@@ -107,7 +109,7 @@ def test_doctor_patient_isolation(client, monkeypatch):
     # 5. Médico B pode acessar o próprio paciente
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.get(
         f"/api/patient-exists/{patient_b_id}",
@@ -143,13 +145,13 @@ def test_doctor_cannot_spoof_patient_owner(client, monkeypatch):
     #    ao Médico B
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/patients",
         json={
             "name": "Paciente Spoof",
-            "doctor_id": "doctor-B",
+            "doctor_id": DOCTOR_B,
         },
         headers=headers_a,
     )
@@ -158,9 +160,9 @@ def test_doctor_cannot_spoof_patient_owner(client, monkeypatch):
 
     patient = response.get_json()
 
-    # O servidor deve IGNORAR doctor_id="doctor-B"
+    # O servidor deve IGNORAR doctor_id=DOCTOR_B
     # e utilizar o médico autenticado.
-    assert patient["doctor_id"] == "doctor-A"
+    assert patient["doctor_id"] == DOCTOR_A
 
     patient_id = patient["patient_id"]
 
@@ -168,7 +170,7 @@ def test_doctor_cannot_spoof_patient_owner(client, monkeypatch):
     # 2. Médico B tenta acessar o paciente
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.get(
         f"/api/patient-exists/{patient_id}",
@@ -181,7 +183,7 @@ def test_doctor_cannot_spoof_patient_owner(client, monkeypatch):
     # 3. Médico A continua podendo acessar o paciente
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.get(
         f"/api/patient-exists/{patient_id}",
@@ -202,7 +204,7 @@ def test_doctor_all_patients_isolation(client, monkeypatch):
     # 1. Médico A cria Paciente A
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/patients",
@@ -218,7 +220,7 @@ def test_doctor_all_patients_isolation(client, monkeypatch):
     # 2. Médico B cria Paciente B
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/patients",
@@ -234,7 +236,7 @@ def test_doctor_all_patients_isolation(client, monkeypatch):
     # 3. Médico A lista pacientes
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.get(
         "/api/all-patients",
@@ -261,7 +263,7 @@ def test_doctor_all_patients_isolation(client, monkeypatch):
     # 4. Médico B lista pacientes
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.get(
         "/api/all-patients",
@@ -291,7 +293,7 @@ def test_doctor_transcription_log_isolation(client, monkeypatch):
     # 1. Médico A cria Paciente A
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/patients",
@@ -307,7 +309,7 @@ def test_doctor_transcription_log_isolation(client, monkeypatch):
     # 2. Médico B cria Paciente B
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/patients",
@@ -323,7 +325,7 @@ def test_doctor_transcription_log_isolation(client, monkeypatch):
     # 3. Médico A acessa o próprio log
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.get(
         f"/api/patients/{patient_a_id}/transcription-log",
@@ -347,7 +349,7 @@ def test_doctor_transcription_log_isolation(client, monkeypatch):
     # 5. Médico B acessa o próprio log
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.get(
         f"/api/patients/{patient_b_id}/transcription-log",
@@ -378,7 +380,7 @@ def test_doctor_extension_data_isolation(client, monkeypatch):
     # 1. Médico A cria Paciente A
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/patients",
@@ -394,7 +396,7 @@ def test_doctor_extension_data_isolation(client, monkeypatch):
     # 2. Médico B cria Paciente B
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/patients",
@@ -410,7 +412,7 @@ def test_doctor_extension_data_isolation(client, monkeypatch):
     # 3. Médico A acessa os próprios dados
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.get(
         f"/api/patients/{patient_a_id}/extension-data",
@@ -434,7 +436,7 @@ def test_doctor_extension_data_isolation(client, monkeypatch):
     # 5. Médico B acessa os próprios dados
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.get(
         f"/api/patients/{patient_b_id}/extension-data",
@@ -468,7 +470,7 @@ def test_doctor_consultations_isolation(client, monkeypatch):
     # 1. Médico A cria Paciente A
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/patients",
@@ -490,7 +492,7 @@ def test_doctor_consultations_isolation(client, monkeypatch):
     # 2. Médico B cria Paciente B
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/patients",
@@ -511,7 +513,7 @@ def test_doctor_consultations_isolation(client, monkeypatch):
     # 3. Médico A pode listar as consultas do próprio paciente
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.get(
         f"/api/patients/{patient_a_id}/consultations",
@@ -535,7 +537,7 @@ def test_doctor_consultations_isolation(client, monkeypatch):
     # 5. Médico B pode listar as consultas do próprio paciente
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.get(
         f"/api/patients/{patient_b_id}/consultations",
@@ -568,7 +570,7 @@ def test_doctor_consultation_history_isolation(client, monkeypatch):
     # 1. Médico A cria Paciente A
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/patients",
@@ -586,7 +588,7 @@ def test_doctor_consultation_history_isolation(client, monkeypatch):
     # 2. Médico B cria Paciente B
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/patients",
@@ -604,7 +606,7 @@ def test_doctor_consultation_history_isolation(client, monkeypatch):
     # 3. Médico A acessa o próprio histórico
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.get(
         f"/api/patients/{patient_a_id}/consultations/{consultation_a_id}/history",
@@ -628,7 +630,7 @@ def test_doctor_consultation_history_isolation(client, monkeypatch):
     # 5. Médico B acessa o próprio histórico
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.get(
         f"/api/patients/{patient_b_id}/consultations/{consultation_b_id}/history",
@@ -658,7 +660,7 @@ def test_doctor_chat_isolation(client, monkeypatch):
     # 1. Médico A cria Paciente A
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/patients",
@@ -676,7 +678,7 @@ def test_doctor_chat_isolation(client, monkeypatch):
     # 2. Médico B cria Paciente B
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/patients",
@@ -694,7 +696,7 @@ def test_doctor_chat_isolation(client, monkeypatch):
     # 3. Médico A utiliza o chat do próprio paciente
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/chat",
@@ -728,7 +730,7 @@ def test_doctor_chat_isolation(client, monkeypatch):
     # 5. Médico B utiliza o chat do próprio paciente
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/chat",
@@ -769,7 +771,7 @@ def test_doctor_transcription_audio_isolation(client, monkeypatch):
     # 1. Médico A cria Paciente A
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/patients",
@@ -787,7 +789,7 @@ def test_doctor_transcription_audio_isolation(client, monkeypatch):
     # 2. Médico B cria Paciente B
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/patients",
@@ -805,7 +807,7 @@ def test_doctor_transcription_audio_isolation(client, monkeypatch):
     # 3. Médico A tenta enviar áudio para o próprio paciente
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/transcribe_audio",
@@ -852,7 +854,7 @@ def test_doctor_transcription_audio_isolation(client, monkeypatch):
     # 5. Médico B tenta enviar áudio para paciente A
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/transcribe_audio",
@@ -883,7 +885,7 @@ def test_doctor_extracted_data_isolation(client, monkeypatch):
     # 1. Médico A cria Paciente A
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/patients",
@@ -901,7 +903,7 @@ def test_doctor_extracted_data_isolation(client, monkeypatch):
     # 2. Médico B cria Paciente B
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/patients",
@@ -933,7 +935,7 @@ def test_doctor_extracted_data_isolation(client, monkeypatch):
     #    usando /api/extension/extracted-data
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/extension/extracted-data",
@@ -966,7 +968,7 @@ def test_doctor_extracted_data_isolation(client, monkeypatch):
     #    usando /api/extension/extracted-data
     # ============================================================
 
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/extension/extracted-data",
@@ -1004,7 +1006,7 @@ def test_doctor_extracted_data_isolation(client, monkeypatch):
     # 7. Agora testa a rota /api/extracted-data
     # ============================================================
 
-    headers_a = _auth_headers(monkeypatch, "doctor-A")
+    headers_a = _auth_headers(monkeypatch, DOCTOR_A)
 
     response = client.post(
         "/api/extracted-data",
@@ -1021,7 +1023,7 @@ def test_doctor_extracted_data_isolation(client, monkeypatch):
     assert response.status_code == 403, response.get_json()
 
     # Médico B deve conseguir acessar o próprio paciente.
-    headers_b = _auth_headers(monkeypatch, "doctor-B")
+    headers_b = _auth_headers(monkeypatch, DOCTOR_B)
 
     response = client.post(
         "/api/extracted-data",

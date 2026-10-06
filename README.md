@@ -44,41 +44,82 @@ O produto **funciona como demo**, mas não como ferramenta de uso diário: banco
 | B | [Inventário dos repositórios](docs/anexos/B-inventario-repositorios.md) | Referência |
 | C | [Documentação do Grupo 2 (2026.1)](docs/anexos/C-documentacao-grupo-2-2026-1.pdf) | Referência |
 
-## Como rodar a base atual (v4.0 — Equipe 6 + Grupo 2)
+## Como rodar (v5.0 — Sprint 1)
 
-Instruções herdadas e corrigidas. A Sprint 1 substitui isto por `docker compose up` (item B12).
+### Caminho rápido: Docker
 
-Backend — Python 3.11 ou 3.12 (obrigatório): esta versão do projeto suporta somente Python 3.11 e 3.12, devido à dependência de áudio utilizada pela diarização. Python 3.13 ou superior não é suportado.
+Pré-requisitos: Docker Desktop (com WSL2 no Windows) e Google Chrome.
+Não é preciso ter Python instalado — a imagem do backend já usa Python 3.11.
 
+```bash
+cp API/.env.example API/.env
+```
+
+Preencha em `API/.env` no mínimo `GEMINI_API_KEY`, `AUTH_SECRET_KEY` e
+`AUTH_BOOTSTRAP_EMAIL` / `AUTH_BOOTSTRAP_PASSWORD`. Sem `AUTH_SECRET_KEY` toda
+rota autenticada responde 500; sem `AUTH_BOOTSTRAP_*` nenhum administrador é
+criado e ninguém consegue entrar (D‑22/D‑23). O arquivo está no `.gitignore`.
+
+```bash
+docker compose up -d --build
+```
+
+Sobe três serviços:
+
+| Serviço | Endereço | O que é |
+|---|---|---|
+| `copmed-web` | http://localhost:8080 | Sistema gerenciador (login, pacientes, admin) |
+| `backend` | http://localhost:3001 | API Flask (`/api/health` para checagem) |
+| `db` | localhost:5432 | PostgreSQL |
+
+> **Banco de dados:** pacientes, consultas, mensagens, transcrições, dados da
+> extensão e usuários ficam no PostgreSQL (B19: modelos em `API/models/` e
+> migrações Alembic em `API/migrations/`; B20: repositórios em
+> `API/repositories/`). O backend aplica as migrações sozinho ao iniciar
+> (`alembic upgrade head`).
+>
+> **Dados antigos:** o que estava em `patients_db.json` / `users_db.json`
+> **não aparece** até o B21 copiar esses arquivos para o banco. Eles continuam
+> no volume `backend_data`, intactos. Até lá, o admin inicial é recriado a
+> partir de `AUTH_BOOTSTRAP_*` no `API/.env`.
+
+### Extensão Chrome
+
+A extensão **não** é servida pelo Docker: ela depende das APIs `chrome.*` e
+precisa ser carregada como extensão de verdade. Aberta como página web comum,
+ela trava em "Validando sessão...".
+
+```bash
+cd front/copmed-extension && npm install && npm run build
+```
+
+Em `chrome://extensions`, ative o **Modo desenvolvedor**, clique em **Carregar
+sem compactação** e selecione `front/copmed-extension/dist`. Para gravar áudio,
+libere o Microfone nas permissões da extensão.
+
+### Rodando sem Docker
+
+**Backend — Python 3.11 ou 3.12 (obrigatório).** Esta versão do projeto suporta
+somente Python 3.11 e 3.12, devido à dependência de áudio (`audioop`) usada pela
+diarização. Python 3.13 ou superior **não é suportado**. Confirme antes de
+instalar:
+
+```bash
 python --version
+```
 
-A versão deve ser Python 3.11.x ou Python 3.12.x.
+A versão deve ser `3.11.x` ou `3.12.x`. Em seguida:
 
 ```bash
-cd API
-pip install -r requirements.txt
-python -m spacy download pt_core_news_lg
+cd API && pip install -r requirements.txt && python -m spacy download pt_core_news_lg
 ```
 
-Crie `API/backend/.env` (ou `API/.env`) com, no mínimo:
-
-```env
-GEMINI_API_KEY=<sua chave>
-AUTH_SECRET_KEY=<string aleatória longa>
-AUTH_BOOTSTRAP_EMAIL=admin@exemplo.local
-AUTH_BOOTSTRAP_PASSWORD=<senha forte>
-CORS_ORIGINS=http://localhost:5174
-```
-
-Sem `AUTH_SECRET_KEY` toda rota autenticada responde 401; sem `AUTH_BOOTSTRAP_*` nenhum administrador é criado e ninguém consegue entrar (D‑22/D‑23). O arquivo está no `.gitignore`; nunca commitar. Os modelos Vosk (`API/backend/vosk-model-small-pt-0.3` e `vosk-model-spk-0.4`) ainda vêm no repositório; a Sprint 1 os move para download por script (B13).
-
-Para criar ou verificar o administrador inicial, com `AUTH_BOOTSTRAP_EMAIL` e `AUTH_BOOTSTRAP_PASSWORD` configurados, execute a partir da raiz do projeto:
+Os modelos Vosk não são mais versionados (o clone caiu de ~67 MB para menos de
+5 MB). Baixe-os com o script idempotente:
 
 ```bash
-python .\API\bootstrap_admin.py
+python scripts/download_models.py
 ```
-
-O script n?o cria um usu?rio duplicado caso o administrador informado j? exista.
 
 ```bash
 python server.py
@@ -86,29 +127,66 @@ python server.py
 
 Servidor em `http://localhost:3001`.
 
-**Extensão:**
+Para criar ou verificar o administrador inicial sem subir o servidor (com
+`AUTH_BOOTSTRAP_EMAIL` e `AUTH_BOOTSTRAP_PASSWORD` configurados), a partir da
+raiz do projeto:
 
 ```bash
-cd front/copmed-extension
-npm install
-npm run build
+python ./API/bootstrap_admin.py
 ```
 
-Em `chrome://extensions`, ative o Modo desenvolvedor, clique em "Carregar sem compactação" e selecione a pasta `dist`. Para gravar áudio, em "Mais opções" da extensão → permissões → Microfone → Permitir.
+O script aplica as migrações e não cria usuário duplicado se o administrador
+já existir.
 
-**Sistema gerenciador web:**
+Sistema gerenciador web:
 
 ```bash
-cd front/copmed-web
-npm install
-npm run dev
+cd front/copmed-web && npm install && npm run dev
 ```
 
-Abre em `http://localhost:5174`. Entre com o e‑mail/senha do bootstrap e perfil `administrador`; médicos se cadastram na aba "Cadastrar médico" e ficam pendentes até o admin aprovar em **Médicos**. Nesta versão um médico aprovado ainda não vê os pacientes de exemplo (D‑24).
+Abre em `http://localhost:5174`. Entre com o e‑mail/senha do bootstrap e perfil
+`administrador`; médicos se cadastram na aba "Cadastrar médico" e ficam
+pendentes até o admin aprovar em **Médicos**.
 
-**Docker (só backend):** crie `.env` na raiz com as mesmas variáveis e rode `docker compose up --build` (o compose ainda não sobe a web — B12).
+### Testes
 
-**Conhecido e quebrado nesta versão:** a extração do Amplimed usa dois conjuntos de seletores divergentes (D‑01); a diarização está em modo de teste (D‑03); médicos não veem os pacientes legados (D‑24); 16 testes quebram por 401 (D‑17). Todos são itens das Sprints 0–1.
+```bash
+cd API && pip install -r requirements-dev.txt && pytest
+```
+
+As dependências pesadas (vosk, spaCy, numpy,
+speech_recognition) são substituídas por stubs no `tests/conftest.py`, então a
+suíte roda em segundos e **não** precisa dos modelos Vosk — é o que permite
+rodá-la no CI.
+
+Os testes de migração (`tests/test_migracoes.py`) rodam sempre em SQLite e,
+se `TEST_POSTGRES_URL` estiver definida, também em PostgreSQL — o CI sobe um
+Postgres 16 para isso. Localmente, use um banco **separado** (o teste desfaz a
+migração no fim e apagaria as tabelas do banco de desenvolvimento):
+
+```bash
+docker compose exec db createdb -U copmed copmed_test
+TEST_POSTGRES_URL=postgresql+psycopg://copmed:<senha>@localhost:5432/copmed_test pytest tests/test_migracoes.py
+```
+
+A suíte inteira (rotas e repositórios) roda em SQLite por padrão. Para rodá-la
+no PostgreSQL, aponte `TEST_DATABASE_URL` para outro banco separado (as
+tabelas são apagadas antes e depois de cada teste):
+
+```bash
+docker compose exec db createdb -U copmed copmed_suite
+TEST_DATABASE_URL=postgresql+psycopg://copmed:<senha>@localhost:5432/copmed_suite pytest
+```
+
+Ao mudar um modelo em `API/models/`, gere a migração e confira:
+
+```bash
+cd API && alembic revision --autogenerate -m "descricao" && alembic check
+```
+
+**Conhecido e quebrado nesta versão:** a extração do Amplimed usa dois conjuntos
+de seletores divergentes (D‑01); a diarização está em modo de teste (D‑03);
+médicos não veem os pacientes legados (D‑24).
 
 ## Validação do README
 

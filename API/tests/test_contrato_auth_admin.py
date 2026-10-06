@@ -27,13 +27,12 @@ def _fake_login_as(monkeypatch, profile="medico", user_id="user-1"):
 
 
 @pytest.fixture()
-def users_db(tmp_path, monkeypatch):
-    """Usa um arquivo de usuarios temporario e uma chave secreta de teste."""
-    monkeypatch.setattr(auth_service, "USERS_DB_FILE", str(tmp_path / "users_db.json"))
+def users_db(temp_db_file, monkeypatch):
+    """Banco de teste (usuarios na tabela `medico`, B20) e chave secreta de teste."""
     monkeypatch.setattr(auth_service.settings, "auth_secret_key", "chave-de-teste")
     monkeypatch.setattr(auth_service.settings, "auth_bootstrap_email", "")
     monkeypatch.setattr(auth_service.settings, "auth_bootstrap_password", "")
-    return tmp_path
+    return temp_db_file
 
 
 @pytest.fixture()
