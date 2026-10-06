@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Activity, ClipboardList, HeartPulse, LockKeyhole, Mail, UserRound } from 'lucide-react';
-import { login, registerDoctor } from '../api';
+import { login, registerDoctor, sessionFromAuthResponse } from '../api';
 
 const profiles = [
   { value: 'medico', label: 'Médico' },
@@ -16,7 +16,7 @@ const emptyRegisterForm = {
   specialty: '',
 };
 
-function Login({ onLoginSuccess }) {
+function Login({ notice = '', onLoginSuccess }) {
   const [activeTab, setActiveTab] = useState('login');
   const [form, setForm] = useState({
     email: '',
@@ -26,7 +26,7 @@ function Login({ onLoginSuccess }) {
   const [registerForm, setRegisterForm] = useState(emptyRegisterForm);
   const [loading, setLoading] = useState(false);
   const [registerLoading, setRegisterLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(notice);
   const [success, setSuccess] = useState('');
 
   function updateField(field) {
@@ -56,11 +56,7 @@ function Login({ onLoginSuccess }) {
     setLoading(true);
     try {
       const data = await login(form);
-      onLoginSuccess({
-        token: data.token,
-        user: data.user,
-        profile: data.profile,
-      });
+      onLoginSuccess(sessionFromAuthResponse(data));
     } catch (err) {
       setError(err.message || 'Não foi possível autenticar.');
     } finally {

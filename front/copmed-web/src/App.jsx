@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { clearSession, createPatient, getPatients, getStoredSession, storeSession } from './api';
+import {
+  SESSION_EXPIRED_MESSAGE,
+  clearSession,
+  createPatient,
+  getPatients,
+  getStoredSession,
+  onSessionChange,
+  storeSession,
+} from './api';
 import Login from './components/Login.jsx';
 import Layout from './components/Layout.jsx';
 import Dashboard from './components/Dashboard.jsx';
@@ -24,6 +32,7 @@ function App() {
   const [activeView, setActiveView] = useState('dashboard');
   const [patients, setPatients] = useState([]);
   const [patientsState, setPatientsState] = useState({ loading: false, error: '' });
+  const [loginNotice, setLoginNotice] = useState('');
 
   const authenticated = Boolean(session.token);
 
@@ -48,14 +57,31 @@ function App() {
     loadPatients();
   }, [loadPatients]);
 
+  // Token renovado atualiza a sessão; sessão expirada (401 sem renovação) volta ao login.
+  useEffect(
+    () =>
+      onSessionChange((nextSession) => {
+        if (nextSession) {
+          setSession(nextSession);
+          return;
+        }
+        setSession({ token: null, user: null, profile: null });
+        setPatients([]);
+        setLoginNotice(SESSION_EXPIRED_MESSAGE);
+      }),
+    []
+  );
+
   function handleLoginSuccess(nextSession) {
     storeSession(nextSession);
+    setLoginNotice('');
     setSession(nextSession);
     setActiveView(nextSession.profile?.name === 'administrador' ? 'medicos' : 'dashboard');
   }
 
   function handleLogout() {
     clearSession();
+    setLoginNotice('');
     setSession({ token: null, user: null, profile: null });
     setPatients([]);
   }
@@ -67,7 +93,7 @@ function App() {
   }
 
   if (!authenticated) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return <Login notice={loginNotice} onLoginSuccess={handleLoginSuccess} />;
   }
 
   const pageTitle = views[activeView]?.title || 'Dashboard';

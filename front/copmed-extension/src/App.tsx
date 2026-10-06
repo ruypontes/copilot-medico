@@ -4,6 +4,7 @@ import {
   clearSession,
   getAuthenticatedUser,
   getStoredSession,
+  onSessionExpired,
   storeSession,
   type ExtensionSession,
 } from "./services/api";
@@ -32,10 +33,12 @@ function App() {
         }
 
         const data = await getAuthenticatedUser();
+        // Relê a sessão: o token pode ter sido renovado durante a chamada.
+        const currentSession = await getStoredSession();
         const nextSession = {
-          token: storedSession.token,
-          user: data.user || storedSession.user,
-          profile: data.profile || storedSession.profile,
+          ...currentSession,
+          user: data.user || currentSession.user,
+          profile: data.profile || currentSession.profile,
         };
         await storeSession(nextSession);
         if (!ignore) {
@@ -57,6 +60,16 @@ function App() {
       ignore = true;
     };
   }, []);
+
+  // Qualquer chamada que receba 401 sem conseguir renovar o token volta para o login.
+  useEffect(
+    () =>
+      onSessionExpired(() => {
+        setSession(null);
+        setAuthError("Sessão expirada. Entre novamente.");
+      }),
+    []
+  );
 
   async function handleLoginSuccess(nextSession: ExtensionSession) {
     await storeSession(nextSession);

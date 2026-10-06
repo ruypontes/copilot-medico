@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useState } from "react";
-import { login as loginRequest, type ExtensionSession } from "../../services/api";
+import { login as loginRequest, sessionFromAuthResponse, type ExtensionSession } from "../../services/api";
 import AppHeader from "../shared/AppHeader";
 
 const labelStyle = { display: "grid", gap: "6px", color: "#333", fontWeight: 700 } as const;
@@ -34,11 +34,7 @@ export default function ExtensionLogin({
     setLoading(true);
     try {
       const data = await loginRequest(form);
-      onLoginSuccess({
-        token: data.token,
-        user: data.user,
-        profile: data.profile,
-      });
+      onLoginSuccess(sessionFromAuthResponse(data));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Não foi possível entrar.";
       setError(message);

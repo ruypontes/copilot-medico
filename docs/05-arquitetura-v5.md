@@ -143,6 +143,7 @@ erDiagram
 |---|---|---|---|
 | POST | `/api/auth/register` | email, senha, crm | 201 |
 | POST | `/api/auth/login` | email, senha | access, refresh |
+| POST | `/api/auth/refresh` | refresh_token | token, expires_in, refresh_token? |
 | GET/POST | `/api/patients` | — / {sexo, ano_nascimento, identificacao?} | lista / paciente (pseudônimo) |
 | POST | `/api/patients/<id>/consultations` | titulo?, origem_pep?, importar_de?[] | consulta |
 | POST | `/api/consultations/<id>/consent` | tipo, versao_texto | 201 |

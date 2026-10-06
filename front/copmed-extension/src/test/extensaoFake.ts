@@ -9,8 +9,8 @@ type Chamada = { method: string; path: string; body: unknown; auth: string | und
 export const P1 = { id: "p1aaaaaaaaa", name: "Fulano Teste" };
 export const P2 = { id: "p2bbbbbbbbb", name: "Ciclano Teste" };
 export const TOKEN = { copmed_extension_token: "tok-salvo" };
+// Paciente e consulta ficam no chrome.storage.local; o token, no chrome.storage.session.
 export const PACIENTE_SALVO = {
-  ...TOKEN,
   patientId: P1.id,
   patientName: P1.name,
   consultationId: "c1xxxxxxxx",
@@ -20,8 +20,13 @@ export const PACIENTE_SALVO = {
 // Estado da API e do chrome.storage simulados; recriado a cada teste por instalarFakes().
 export const fake = {
   store: {} as Record<string, unknown>,
+  // chrome.storage.session
+  sessao: {} as Record<string, unknown>,
   chamadas: [] as Chamada[],
   authMeStatus: 200,
+  // Tokens que a API simulada recusa com 401 e resposta do /api/auth/refresh.
+  tokensExpirados: [] as string[],
+  refreshStatus: 404,
   pacientes: [] as { id: string; name: string }[],
   consultas: {} as Record<string, Consulta[]>,
   historicos: {} as Record<string, Historico[]>,
@@ -35,10 +40,24 @@ function resposta(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(body) };
 }
 
-function api(method: string, path: string, body: Record<string, unknown>) {
+function api(method: string, path: string, body: Record<string, unknown>, auth: string | undefined) {
   let m: RegExpMatchArray | null;
   if (path === "/api/auth/login") {
-    return resposta(200, { token: "tok-novo", user: { email: body.email }, profile: { role: "medico" } });
+    return resposta(200, {
+      token: "tok-novo",
+      refresh_token: "ref-novo",
+      expires_in: 900,
+      user: { email: body.email },
+      profile: { role: "medico" },
+    });
+  }
+  if (path === "/api/auth/refresh") {
+    return fake.refreshStatus === 200
+      ? resposta(200, { token: "tok-renovado", expires_in: 900 })
+      : resposta(fake.refreshStatus, { message: "Refresh inválido" });
+  }
+  if (auth && fake.tokensExpirados.includes(auth.replace("Bearer ", ""))) {
+    return resposta(401, { message: "Token expirado" });
   }
   if (path === "/api/auth/me") {
     return fake.authMeStatus === 200
@@ -100,8 +119,11 @@ function api(method: string, path: string, body: Record<string, unknown>) {
 
 export function instalarFakes() {
   fake.store = {};
+  fake.sessao = {};
   fake.chamadas = [];
   fake.authMeStatus = 200;
+  fake.tokensExpirados = [];
+  fake.refreshStatus = 404;
   fake.pacientes = [P1, P2];
   fake.consultas = {
     [P1.id]: [
@@ -118,26 +140,23 @@ export function instalarFakes() {
     c3zzzzzzzz: [msg("user", "Pergunta do retorno")],
   };
 
-  const pick = (keys: string | string[]) => {
-    const out: Record<string, unknown> = {};
-    for (const k of Array.isArray(keys) ? keys : [keys]) if (k in fake.store) out[k] = fake.store[k];
-    return out;
-  };
-  const chromeFake = {
-    storage: {
-      local: {
-        get: (keys: string | string[], cb: (r: Record<string, unknown>) => void) =>
-          setTimeout(() => cb(pick(keys)), 0),
-        set: (values: Record<string, unknown>, cb?: () => void) => {
-          Object.assign(fake.store, values);
-          if (cb) setTimeout(cb, 0);
-        },
-        remove: (keys: string[], cb?: () => void) => {
-          for (const k of keys) delete fake.store[k];
-          if (cb) setTimeout(cb, 0);
-        },
-      },
+  const area = (dados: () => Record<string, unknown>) => ({
+    get: (keys: string | string[], cb: (r: Record<string, unknown>) => void) => {
+      const out: Record<string, unknown> = {};
+      for (const k of Array.isArray(keys) ? keys : [keys]) if (k in dados()) out[k] = dados()[k];
+      setTimeout(() => cb(out), 0);
     },
+    set: (values: Record<string, unknown>, cb?: () => void) => {
+      Object.assign(dados(), values);
+      if (cb) setTimeout(cb, 0);
+    },
+    remove: (keys: string[], cb?: () => void) => {
+      for (const k of keys) delete dados()[k];
+      if (cb) setTimeout(cb, 0);
+    },
+  });
+  const chromeFake = {
+    storage: { local: area(() => fake.store), session: area(() => fake.sessao) },
   };
   vi.stubGlobal("chrome", chromeFake);
 
@@ -149,7 +168,7 @@ export function instalarFakes() {
       const body = typeof init.body === "string" ? JSON.parse(init.body) : {};
       const headers = (init.headers || {}) as Record<string, string>;
       fake.chamadas.push({ method, path, body, auth: headers.Authorization });
-      return api(method, path, body);
+      return api(method, path, body, headers.Authorization);
     })
   );
 

@@ -1,67 +1,25 @@
-export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+import {
+  API_URL,
+  SESSION_EXPIRED_MESSAGE,
+  expireSession,
+  getValidToken,
+  refreshSession,
+} from "./session";
 
-const TOKEN_KEY = "copmed_extension_token";
-const USER_KEY = "copmed_extension_user";
-const PROFILE_KEY = "copmed_extension_profile";
-
-export type ExtensionSession = {
-  token: string | null;
-  user: Record<string, unknown> | null;
-  profile: Record<string, unknown> | null;
-};
+export {
+  API_URL,
+  clearSession,
+  getStoredSession,
+  onSessionExpired,
+  sessionFromAuthResponse,
+  storeSession,
+  type ExtensionSession,
+} from "./session";
 
 type ApiRequestOptions = RequestInit & {
   token?: string | null;
   auth?: boolean;
 };
-
-function storageGet(keys: string[]): Promise<Record<string, unknown>> {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(keys, (result) => resolve(result));
-  });
-}
-
-function storageSet(values: Record<string, unknown>): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.local.set(values, () => resolve());
-  });
-}
-
-function storageRemove(keys: string[]): Promise<void> {
-  return new Promise((resolve) => {
-    chrome.storage.local.remove(keys, () => resolve());
-  });
-}
-
-function safeJsonParse(value: unknown) {
-  if (typeof value !== "string") return value || null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
-export async function getStoredSession(): Promise<ExtensionSession> {
-  const stored = await storageGet([TOKEN_KEY, USER_KEY, PROFILE_KEY]);
-  return {
-    token: typeof stored[TOKEN_KEY] === "string" ? stored[TOKEN_KEY] : null,
-    user: safeJsonParse(stored[USER_KEY]) as Record<string, unknown> | null,
-    profile: safeJsonParse(stored[PROFILE_KEY]) as Record<string, unknown> | null,
-  };
-}
-
-export async function storeSession(session: ExtensionSession): Promise<void> {
-  await storageSet({
-    [TOKEN_KEY]: session.token,
-    [USER_KEY]: JSON.stringify(session.user),
-    [PROFILE_KEY]: JSON.stringify(session.profile),
-  });
-}
-
-export async function clearSession(): Promise<void> {
-  await storageRemove([TOKEN_KEY, USER_KEY, PROFILE_KEY]);
-}
 
 async function parseJson(response: Response) {
   const text = await response.text();
@@ -73,19 +31,36 @@ async function parseJson(response: Response) {
   }
 }
 
-export async function apiRequest(path: string, { token, auth = true, headers, ...options }: ApiRequestOptions = {}) {
-  const session = auth && token === undefined ? await getStoredSession() : null;
-  const authToken = token === undefined ? session?.token : token;
+function send(path: string, options: RequestInit, headers: HeadersInit | undefined, authToken: string | null) {
   const isFormData = options.body instanceof FormData;
-
-  const response = await fetch(`${API_URL}${path}`, {
+  return fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      ...(auth && authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...(headers as Record<string, string> | undefined),
     },
   });
+}
+
+// Tratamento central de 401: renova o token uma vez e repete a chamada;
+// sem renovação possível, apaga a sessão e avisa o App para voltar ao login.
+export async function apiRequest(path: string, { token, auth = true, headers, ...options }: ApiRequestOptions = {}) {
+  const usesStoredToken = auth && token === undefined;
+  const authToken = !auth ? null : usesStoredToken ? await getValidToken() : token ?? null;
+
+  let response = await send(path, options, headers, authToken);
+
+  if (response.status === 401 && usesStoredToken && authToken) {
+    const renewed = await refreshSession();
+    if (renewed?.token) {
+      response = await send(path, options, headers, renewed.token);
+    }
+    if (response.status === 401) {
+      await expireSession();
+      throw new Error(SESSION_EXPIRED_MESSAGE);
+    }
+  }
 
   const data = await parseJson(response);
   if (!response.ok) {

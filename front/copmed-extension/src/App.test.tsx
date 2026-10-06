@@ -17,6 +17,7 @@ afterEach(() => {
 
 async function abrirComPacienteSalvo() {
   Object.assign(fake.store, PACIENTE_SALVO);
+  Object.assign(fake.sessao, TOKEN);
   const view = render(<App />);
   await screen.findByText("Paciente: Fulano Teste");
   await screen.findByText("Resposta da consulta A");
@@ -32,12 +33,12 @@ describe("sessão", () => {
   });
 
   it("token inválido é apagado e volta ao login com aviso", async () => {
-    Object.assign(fake.store, TOKEN);
+    Object.assign(fake.sessao, TOKEN);
     fake.authMeStatus = 401;
     render(<App />);
     await screen.findByText("Sessão expirada. Entre novamente.");
     expect(fake.chamadas[0]).toMatchObject({ method: "GET", path: "/api/auth/me", auth: "Bearer tok-salvo" });
-    expect(fake.store.copmed_extension_token).toBeUndefined();
+    expect(fake.sessao.copmed_extension_token).toBeUndefined();
   });
 
   it("login guarda o token e abre o app sem paciente", async () => {
@@ -53,7 +54,8 @@ describe("sessão", () => {
       password: "senha123",
       profile: "medico",
     });
-    expect(fake.store.copmed_extension_token).toBe("tok-novo");
+    expect(fake.sessao.copmed_extension_token).toBe("tok-novo");
+    expect(fake.store.copmed_extension_token).toBeUndefined();
     await screen.findByText("Bem-vindo! Selecione ou crie um paciente para começar.");
     await waitFor(() => expect(chamadasPara("GET", "/api/all-patients")[0]?.auth).toBe("Bearer tok-novo"));
   });
@@ -71,7 +73,8 @@ describe("sessão", () => {
     await abrirComPacienteSalvo();
     fireEvent.click(screen.getByRole("button", { name: "Sair" }));
     await screen.findByRole("heading", { name: "Entrar" });
-    expect(fake.store).toEqual({});
+    expect(fake.sessao).toEqual({});
+    expect(fake.store).toEqual({ copmed_api_url: "http://localhost:3001" });
   });
 });
 
@@ -129,7 +132,7 @@ describe("pacientes e consultas", () => {
   });
 
   it("cria paciente pelo modal e seleciona a primeira consulta", async () => {
-    Object.assign(fake.store, TOKEN);
+    Object.assign(fake.sessao, TOKEN);
     const { container } = render(<App />);
     await screen.findByText("Bem-vindo! Selecione ou crie um paciente para começar.");
     fireEvent.click(container.querySelector(".patient-controls button")!);
