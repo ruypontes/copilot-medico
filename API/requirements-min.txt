@@ -4,3 +4,6 @@ Flask==3.0.3
 Flask-Cors
 pydantic-settings
 python-dotenv
+# Modelos e migracoes (B19); o B20 passa a importa-los no server.py.
+SQLAlchemy>=2.0,<2.1
+alembic>=1.13,<2

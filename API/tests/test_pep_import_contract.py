@@ -7,10 +7,17 @@ Fixtures (conftest.py): `client` e anonimo; `auth_client` e administrador;
 import pytest
 from jsonschema import Draft202012Validator
 
-from backend import patient_db as pdb
 from backend import pep_import
 from backend.openapi import EXEMPLO_REQUEST, build_openapi_spec
 from backend.pep_import import PepImportError
+from repositories import (
+    ConsultaRepository,
+    DadoExtensaoRepository,
+    MensagemRepository,
+    PacienteRepository,
+    sessao,
+)
+from tests.ids import DOCTOR_B, TEST_USER_ID
 
 CANONICAL = "/api/consultations/{cid}/pep-import"
 EXTENSION = "/api/extension/extracted-data"
@@ -26,6 +33,23 @@ CAMPOS_COMPLETOS = {
 
 # --------------------------------------------------------------------------- helpers
 
+def _repo(cls):
+    return cls(sessao.obter_sessao())
+
+
+def _paciente_com_consulta(nome, medico_id):
+    pid = _repo(PacienteRepository).criar(nome=nome, medico_id=medico_id)["id"]
+    return pid, _repo(ConsultaRepository).criar(pid, "Consulta")
+
+
+def _dados_extensao(pid):
+    return _repo(DadoExtensaoRepository).listar(pid)
+
+
+def _historico(cid):
+    return _repo(MensagemRepository).historico(cid)
+
+
 def _schema_validator(spec, name):
     root = {"$ref": f"#/components/schemas/{name}", "components": spec["components"]}
     return Draft202012Validator(root)
@@ -33,11 +57,8 @@ def _schema_validator(spec, name):
 
 @pytest.fixture()
 def consulta(temp_db_file):
-    """Paciente do usuario de teste (user-test-1) com uma consulta."""
-    pid = pdb.generate_patient_id()
-    pdb.ensure_patient_exists(pid, name="Paciente Sintetico", doctor_id="user-test-1")
-    cid = pdb.add_consultation_to_patient(pid, "Consulta")
-    return pid, cid
+    """Paciente do usuario de teste com uma consulta."""
+    return _paciente_com_consulta("Paciente Sintetico", TEST_USER_ID)
 
 
 def _body(**extra):
@@ -113,13 +134,13 @@ def test_canonica_registra_dados_e_responde_conforme_o_spec(auth_client, consult
                                  "notas": ["anamnese"], "total": 2}
     _schema_validator(build_openapi_spec(), "PepImportResposta").validate(payload)
 
-    item = pdb.get_patient_extension_data(pid)[0]
+    item = _dados_extensao(pid)[0]
     assert item["type"] == "pep_import"
     assert item["pep_origem"] == "amplimed"
     assert item["consultation_id"] == cid
     assert item["content"] == {"peso": "70", "anamnese": "Cefaleia."}
 
-    historico = pdb.get_consultation_chat_history(pid, cid)
+    historico = _historico(cid)
     assert [m["role"] for m in historico] == ["user", "model"]
     assert "- Peso (kg): 70" in historico[0]["parts"][0]["text"]
 
@@ -140,14 +161,12 @@ def test_canonica_consulta_inexistente_404(auth_client, temp_db_file):
 
 
 def test_canonica_paciente_de_outro_medico_403(client, temp_db_file, auth_headers):
-    pid = pdb.generate_patient_id()
-    pdb.ensure_patient_exists(pid, name="De outro", doctor_id="outro-medico")
-    cid = pdb.add_consultation_to_patient(pid, "Consulta")
+    pid, cid = _paciente_com_consulta("De outro", DOCTOR_B)
 
     resp = client.post(CANONICAL.format(cid=cid), json=_body(), headers=auth_headers("medico"))
 
     assert resp.status_code == 403
-    assert pdb.get_patient_extension_data(pid) == []
+    assert _dados_extensao(pid) == []
 
 
 def test_canonica_medico_dono_do_paciente_200(client, consulta, auth_headers):
@@ -167,7 +186,7 @@ def test_canonica_400_e_nada_e_gravado(auth_client, consulta, corpo):
     resp = auth_client.post(CANONICAL.format(cid=cid), json=corpo)
     assert resp.status_code == 400
     assert resp.get_json()["status"] == "error"
-    assert pdb.get_patient_extension_data(pid) == []
+    assert _dados_extensao(pid) == []
 
 
 def test_canonica_corpo_nao_json_400(auth_client, consulta):
@@ -198,7 +217,7 @@ def test_rotas_da_extensao_mantem_o_formato_livre_legado(auth_client, consulta, 
     assert resp.status_code == 200
     assert payload["extension_data"]["type"] == "extracted_data"
     assert "resumo" not in payload
-    assert "peso: 70" in pdb.get_consultation_chat_history(pid, cid)[0]["parts"][0]["text"]
+    assert "peso: 70" in _historico(cid)[0]["parts"][0]["text"]
 
 
 @pytest.mark.parametrize("rota", [EXTENSION, LEGACY])
@@ -208,14 +227,12 @@ def test_rotas_da_extensao_exigem_consulta_e_paciente(auth_client, consulta, rot
     sem_paciente = auth_client.post(rota, json=_body(consultation_id=cid))
     assert sem_consulta.status_code == 400 and "consultation_id" in sem_consulta.get_json()["message"]
     assert sem_paciente.status_code == 400 and "patient_id" in sem_paciente.get_json()["message"]
-    assert pdb.get_patient_extension_data(pid) == []
+    assert _dados_extensao(pid) == []
 
 
 def test_extensao_consulta_de_outro_paciente_404(auth_client, consulta):
     pid, _ = consulta
-    outro = pdb.generate_patient_id()
-    pdb.ensure_patient_exists(outro, name="Outro", doctor_id="user-test-1")
-    cid_outro = pdb.add_consultation_to_patient(outro, "Consulta")
+    _, cid_outro = _paciente_com_consulta("Outro", TEST_USER_ID)
     resp = auth_client.post(EXTENSION, json=_body(patient_id=pid, consultation_id=cid_outro))
     assert resp.status_code == 404
 

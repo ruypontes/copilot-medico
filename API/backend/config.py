@@ -18,7 +18,10 @@ class Settings(BaseSettings):
 
     auth_secret_key: str = ""
     auth_token_expiration_minutes: int = 60
+    # Bancos JSON antigos (pre-B20). A aplicacao nao os le mais; ficam
+    # configuraveis so para o script de migracao JSON -> banco do B21.
     auth_users_db_file: str = str(Path(__file__).with_name("users_db.json"))
+    patients_db_file: str = str(Path(__file__).with_name("patients_db.json"))
     auth_bootstrap_email: str = ""
     auth_bootstrap_password: str = ""
     auth_bootstrap_name: str = "Administrador"

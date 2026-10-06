@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 
 API_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,6 +18,10 @@ def main() -> int:
         return 1
 
     try:
+        # Usuarios ficam no banco desde o B20: garante as tabelas antes.
+        from repositories import sessao
+
+        sessao.aplicar_migracoes()
         bootstrap_users_if_needed()
     except Exception as exc:
         print(f"ERRO ao criar o administrador: {exc}")

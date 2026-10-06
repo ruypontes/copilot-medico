@@ -9,10 +9,9 @@ Migrado de unittest para pytest. Tres problemas da versao anterior:
    `auth_client`, que so e construida depois dos stubs.
 2. Os sys.path.insert manuais foram substituidos por `pythonpath = .` no
    pytest.ini.
-3. O alvo `patch('patient_db.get_patient_data')` nao existia (o modulo e
-   `backend.patient_db`, e o server importa o nome diretamente). Todos os
-   alvos agora apontam para `server.<nome>`, que e onde a referencia e
-   resolvida em tempo de chamada.
+3. O alvo `patch('patient_db.get_patient_data')` nao existia. Desde o B20
+   a persistencia e feita por repositorios: os testes trocam as fabricas
+   `server._pacientes` / `server._consultas`, resolvidas em tempo de chamada.
 """
 from unittest.mock import patch
 
@@ -24,26 +23,21 @@ from unittest.mock import patch
 
 def test_create_patient_success(auth_client):
     """Criar paciente deve retornar 201 e propagar os IDs gerados."""
-    with patch("server.generate_patient_id", return_value="NEW_TEST_ID_001") as mock_gen, \
-         patch("server.add_consultation_to_patient", return_value="CONSULTA_ID_001") as mock_add, \
-         patch("server.ensure_patient_exists") as mock_ensure:
+    with patch("server._pacientes") as mock_pacientes, \
+         patch("server._consultas") as mock_consultas:
 
-        mock_ensure.return_value = {"name": "Novo Paciente", "chat_history": []}
+        mock_criar = mock_pacientes.return_value.criar
+        mock_criar.return_value = {"id": "NEW_TEST_ID_001", "name": "Novo Paciente", "doctor_id": None}
+        mock_add = mock_consultas.return_value.criar
+        mock_add.return_value = "CONSULTA_ID_001"
 
         response = auth_client.post("/api/patients", json={"name": "Novo Paciente"})
 
         assert response.status_code == 201, "Deve retornar 201 ao criar paciente"
 
-        mock_gen.assert_called_once()
         mock_add.assert_called_once_with("NEW_TEST_ID_001", "Primeira Consulta")
-
-        # ensure_patient_exists passou a receber doctor_id/created_by junto da
-        # autenticacao; validamos os argumentos relevantes sem travar a
-        # assinatura inteira.
-        assert mock_ensure.call_count == 1
-        args, kwargs = mock_ensure.call_args
-        assert args[0] == "NEW_TEST_ID_001"
-        assert kwargs["name"] == "Novo Paciente"
+        assert mock_criar.call_count == 1
+        assert mock_criar.call_args.kwargs["nome"] == "Novo Paciente"
 
         body = response.get_json()
         assert body["patient_id"] == "NEW_TEST_ID_001"
@@ -63,7 +57,8 @@ def test_create_patient_requires_authentication(client):
 # ---------------------------------------------------------------------------
 
 def test_check_patient_exists_found(auth_client):
-    with patch("server.get_patient_data") as mock_get:
+    with patch("server._pacientes") as mock_pacientes:
+        mock_get = mock_pacientes.return_value.obter
         mock_get.return_value = {"name": "Existente"}
 
         response = auth_client.get("/api/patient-exists/existing_id")
@@ -74,9 +69,8 @@ def test_check_patient_exists_found(auth_client):
 
 
 def test_check_patient_exists_not_found(auth_client):
-    # Alvo corrigido: antes era 'patient_db.get_patient_data', modulo que nao
-    # existe com esse nome - o patch falhava antes mesmo de rodar o teste.
-    with patch("server.get_patient_data", return_value=None):
+    with patch("server._pacientes") as mock_pacientes:
+        mock_pacientes.return_value.obter.return_value = None
         response = auth_client.get("/api/patient-exists/non_existing_id")
 
         assert response.status_code == 200
@@ -92,7 +86,9 @@ def test_get_all_patients_success(auth_client):
         {"id": "id_pac_1", "name": "Paciente A"},
         {"id": "id_pac_2", "name": "Paciente B"},
     ]
-    with patch("server.get_all_patients_info", return_value=mock_data) as mock_all:
+    with patch("server._pacientes") as mock_pacientes:
+        mock_all = mock_pacientes.return_value.listar
+        mock_all.return_value = mock_data
         response = auth_client.get("/api/all-patients")
 
         assert response.status_code == 200, "Deve retornar 200 OK."
@@ -104,7 +100,8 @@ def test_get_all_patients_success(auth_client):
 
 
 def test_get_all_patients_empty(auth_client):
-    with patch("server.get_all_patients_info", return_value=[]):
+    with patch("server._pacientes") as mock_pacientes:
+        mock_pacientes.return_value.listar.return_value = []
         response = auth_client.get("/api/all-patients")
 
         assert response.status_code == 200, "Deve retornar 200 mesmo com lista vazia."
@@ -115,7 +112,8 @@ def test_get_all_patients_empty(auth_client):
 
 def test_get_all_patients_internal_error(auth_client):
     """Falha na camada de dados deve virar 500 estruturado, nao stacktrace."""
-    with patch("server.get_all_patients_info", side_effect=Exception("Erro simulado de DB")):
+    with patch("server._pacientes") as mock_pacientes:
+        mock_pacientes.return_value.listar.side_effect = Exception("Erro simulado de DB")
         response = auth_client.get("/api/all-patients")
 
         assert response.status_code == 500
