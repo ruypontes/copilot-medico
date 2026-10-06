@@ -20,6 +20,8 @@ ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 TABELAS = {
     "medico", "paciente", "pseudonimo", "consulta", "mensagem",
     "transcricao", "documento_soap", "consentimento", "dado_extensao",
+    # B26: mapa token -> valor real por consulta, cifrado (US016-CA002).
+    "mapa_anonimizacao",
 }
 
 

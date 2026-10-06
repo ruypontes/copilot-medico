@@ -5,6 +5,7 @@ repositorio recebe uma sessao SQLAlchemy; na aplicacao a sessao vem de
 `sessao.obter_sessao()`, uma por requisicao.
 """
 from . import sessao
+from .anonimizacao import MapaAnonimizacaoRepository
 from .consultas import ConsultaRepository, MensagemRepository
 from .medicos import MedicoRepository
 from .pacientes import MedicoNaoEncontrado, PacienteRepository
@@ -13,6 +14,7 @@ from .registros import DadoExtensaoRepository, TranscricaoRepository
 __all__ = [
     "ConsultaRepository",
     "DadoExtensaoRepository",
+    "MapaAnonimizacaoRepository",
     "MedicoNaoEncontrado",
     "MedicoRepository",
     "MensagemRepository",

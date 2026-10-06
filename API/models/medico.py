@@ -8,7 +8,7 @@ perfis=["administrador"], sem CRM e sem status de aprovacao.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text, Uuid
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, LargeBinary, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CriadoEmMixin, UuidPkMixin, enum_column
@@ -26,6 +26,13 @@ class Medico(UuidPkMixin, CriadoEmMixin, Base):
     # Lista de perfis, ex.: ["medico"], ["administrador"], ["administrador", "medico"].
     perfis: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Envelope de cifra do B26 (ADR-03). `chave_cifrada` guarda a DEK
+    # embrulhada pela chave derivada da senha com `chave_salt`. Nulos ate o
+    # primeiro login apos a atualizacao - ver backend/anonimizacao/cripto.py.
+    # A senha em si nunca e armazenada; sem ela a DEK nao se reconstroi.
+    chave_cifrada: Mapped[bytes | None] = mapped_column(LargeBinary)
+    chave_salt: Mapped[bytes | None] = mapped_column(LargeBinary)
 
     # Fluxo de aprovacao do cadastro de medico (nulo para quem nao e medico).
     status_aprovacao: Mapped[StatusAprovacao | None] = mapped_column(
