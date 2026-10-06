@@ -127,6 +127,17 @@ python server.py
 
 Servidor em `http://localhost:3001`.
 
+Para criar ou verificar o administrador inicial sem subir o servidor (com
+`AUTH_BOOTSTRAP_EMAIL` e `AUTH_BOOTSTRAP_PASSWORD` configurados), a partir da
+raiz do projeto:
+
+```bash
+python ./API/bootstrap_admin.py
+```
+
+O script aplica as migrações e não cria usuário duplicado se o administrador
+já existir.
+
 Sistema gerenciador web:
 
 ```bash

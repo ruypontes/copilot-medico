@@ -235,9 +235,9 @@ def env_for_config(monkeypatch):
     yield
 
 
-# Usuario falso devolvido por `auth_headers`. Existe de verdade na tabela
-# `medico` do banco de teste porque paciente/consulta tem FK para ele (B20).
-TEST_USER_ID = "00000000-0000-4000-8000-000000000001"
+# Usuarios falsos (ver tests/ids.py). Existem de verdade na tabela `medico`
+# do banco de teste porque paciente/consulta tem FK para eles (B20).
+from ids import TEST_USER_ID, USUARIOS_DE_TESTE  # noqa: E402
 
 
 @pytest.fixture()
@@ -263,14 +263,15 @@ def temp_db_file(tmp_path):
     Base.metadata.create_all(engine)
 
     s = sessao.obter_sessao()
-    s.add(Medico(
-        id=uuid.UUID(TEST_USER_ID),
-        email="doctor@example.com",
-        senha_hash="!",
-        nome="Doctor Test",
-        perfis=["administrador", "medico"],
-        status_aprovacao=StatusAprovacao.APROVADO,
-    ))
+    for user_id, email, perfis in USUARIOS_DE_TESTE:
+        s.add(Medico(
+            id=uuid.UUID(user_id),
+            email=email,
+            senha_hash="!",
+            nome=email.split("@")[0],
+            perfis=perfis,
+            status_aprovacao=StatusAprovacao.APROVADO if "medico" in perfis else None,
+        ))
     s.commit()
     sessao.encerrar_sessao()
 

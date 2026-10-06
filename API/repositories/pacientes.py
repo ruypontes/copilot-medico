@@ -69,6 +69,25 @@ class PacienteRepository(Repositorio):
             consulta = consulta.where(Paciente.medico_id == mid)
         return [para_dicionario(p) for p in self.sessao.scalars(consulta)]
 
+    def atribuir_medico_aos_sem_medico(self, medico_id, simular=False) -> list[str]:
+        """D-24 / B68: pacientes sem medico ficam invisiveis para todos os
+        medicos. Atribui `medico_id` a todos eles e devolve os IDs.
+
+        Idempotente (rodar de novo nao muda nada). Com `simular=True` so
+        calcula o resultado, sem gravar.
+        """
+        mid = parse_uuid(medico_id)
+        if mid is None or self.sessao.get(Medico, mid) is None:
+            raise MedicoNaoEncontrado("Medico responsavel nao encontrado.")
+        sem_medico = list(self.sessao.scalars(
+            select(Paciente).where(Paciente.medico_id.is_(None)).order_by(Paciente.criado_em)
+        ))
+        if not simular:
+            for paciente in sem_medico:
+                paciente.medico_id = mid
+            self.sessao.commit()
+        return [id_texto(p.id) for p in sem_medico]
+
     def criar(self, nome=None, medico_id=None, criado_por_id=None) -> dict:
         medico = None
         if medico_id is not None:
