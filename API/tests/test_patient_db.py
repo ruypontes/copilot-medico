@@ -1,6 +1,5 @@
-import json
 import re
-from ..backend import patient_db as pdb
+from backend import patient_db as pdb
 
 def test_load_database_empty_when_missing(temp_db_file):
     data = pdb.load_database()
@@ -11,7 +10,15 @@ def test_save_and_load_database(temp_db_file):
     sample = {"abc": {"name": "John", "consultations": []}}
     pdb.save_database(sample)
     loaded = pdb.load_database()
-    assert loaded == sample
+
+    # load_database() passa cada registro por normalize_patient_record(), que
+    # completa campos novos (id, doctor_id, ...) em bases legadas. Por isso a
+    # ida-e-volta nao e identidade: validamos os dados persistidos, nao o
+    # formato exato do dicionario.
+    assert set(loaded) == set(sample)
+    assert loaded["abc"]["name"] == "John"
+    assert loaded["abc"]["consultations"] == []
+    assert loaded["abc"]["id"] == "abc"
 
 
 def test_generate_patient_id_unique():
@@ -55,21 +62,6 @@ def test_add_message_to_consultation_history_and_get(temp_db_file):
     assert len(history) == 2
     assert history[0]["role"] == "user"
     assert history[0]["parts"][0]["text"] == "Ola"
-
-
-def test_legacy_patient_chat_history_starts_empty(temp_db_file):
-    pid = pdb.generate_patient_id()
-    pdb.ensure_patient_exists(pid)
-    hist = pdb.get_patient_chat_history(pid)
-    assert hist == []
-
-
-def test_add_message_to_history_legacy_creates_structure(temp_db_file):
-    pid = pdb.generate_patient_id()
-    pdb.add_message_to_history(pid, "user", "hello")
-    db = pdb.load_database()
-    assert pid in db
-    assert db[pid]["chat_history"][0]["parts"][0]["text"] == "hello"
 
 
 def test_add_and_get_extension_data(temp_db_file):

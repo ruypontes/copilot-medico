@@ -153,53 +153,6 @@ def ensure_patient_exists(patient_id, name=None, doctor_id=None, created_by=None
     return db[patient_id]
 
 
-# Esta função parece ser um resquício de uma estrutura anterior onde o histórico era por paciente
-# Se o histórico de chat agora é por consulta, esta função pode ser depreciada ou removida se não for mais usada.
-def get_patient_chat_history(patient_id):
-    """
-    Recupera o histórico de chat geral de um paciente.
-    (Pode ser obsoleto se todo o histórico for gerenciado por consultas)
-    """
-    patient_data = get_patient_data(patient_id)
-    if patient_data:
-        return patient_data.get("chat_history", [])
-    return []
-
-# Esta função também parece ser um resquício. 
-# Se você está usando add_message_to_consultation_history, esta pode ser depreciada.
-def add_message_to_history(patient_id: str, role: str, text: str):
-    """
-    Adiciona uma mensagem ao histórico geral do paciente.
-    'role' pode ser 'user' ou 'model'.
-    (Pode ser obsoleto se todo o histórico for gerenciado por consultas)
-    """
-    db = load_database()
-    if patient_id not in db:
-        print(f"Aviso: Paciente {patient_id} não encontrado ao adicionar mensagem. Criando entrada.")
-        ensure_patient_exists(patient_id)
-        db = load_database() # Recarrega após possível criação
-
-    message_parts_for_gemini = [{'text': text}]
-
-    if patient_id in db and "chat_history" in db[patient_id]:
-        db[patient_id]["chat_history"].append({
-            "role": role,
-            "parts": message_parts_for_gemini,
-            "timestamp": datetime.now().isoformat()
-        })
-    else:
-        print(f"Erro crítico: Estrutura do paciente {patient_id} não encontrada ou incompleta no DB.")
-        # Tenta inicializar a estrutura para evitar falha completa
-        db[patient_id] = db.get(patient_id, {})
-        db[patient_id]["name"] = db[patient_id].get("name", "Desconhecido")
-        db[patient_id]["chat_history"] = [{
-            "role": role,
-            "parts": message_parts_for_gemini,
-            "timestamp": datetime.now().isoformat()
-        }]
-
-    save_database(db)
-
 def add_consultation_to_patient(patient_id: str, consultation_title: str = None, consultation_date: str = None, initial_history: list[dict] = None):
     """
     Adiciona uma nova consulta a um paciente existente.
@@ -270,6 +223,20 @@ def consultation_belongs_to_patient(patient_id: str, consultation_id: str) -> bo
         for consultation in patient_data.get("consultations", [])
     )
 
+def find_patient_id_by_consultation(consultation_id: str):
+    """
+    Devolve o id do paciente dono da consulta, ou None se ela nao existir.
+    (O banco JSON e indexado por paciente; a B19 troca isto por uma consulta SQL.)
+    """
+    if not isinstance(consultation_id, str) or not consultation_id:
+        return None
+
+    for patient_id, patient_data in load_database().items():
+        for consultation in patient_data.get("consultations", []):
+            if consultation.get("id") == consultation_id:
+                return patient_id
+    return None
+
 def add_message_to_consultation_history(patient_id: str, consultation_id: str, role: str, text: str):
     """
     Adiciona uma nova mensagem (do usuário ou do modelo) ao histórico de chat
@@ -307,9 +274,15 @@ def add_extension_data_to_patient(
     consultation_id: str = None,
     source_url: str = None,
     created_at: str = None,
+    entry_type: str = "extracted_data",
+    extra: dict = None,
 ):
     """
     Salva dados estruturados capturados pela extensao dentro do registro do paciente.
+
+    `entry_type` diferencia o formato livre legado ("extracted_data") do contrato
+    tipado ("pep_import"); `extra` acrescenta campos de primeiro nivel ao item
+    (ex.: pep_origem) sem poder sobrescrever os campos reservados.
     """
     db = load_database()
     patient_data = db.get(patient_id)
@@ -328,11 +301,13 @@ def add_extension_data_to_patient(
         "consultation_id": consultation_id,
         "source": "extension",
         "source_url": source_url,
-        "type": "extracted_data",
+        "type": entry_type,
         "content": content,
         "created_at": entry_created_at,
         "timestamp": entry_created_at,
     }
+    for key, value in (extra or {}).items():
+        entry.setdefault(key, value)
 
     patient_data["extension_data"].insert(0, entry)
     save_database(db)
