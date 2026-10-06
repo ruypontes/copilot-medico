@@ -44,78 +44,41 @@ O produto **funciona como demo**, mas não como ferramenta de uso diário: banco
 | B | [Inventário dos repositórios](docs/anexos/B-inventario-repositorios.md) | Referência |
 | C | [Documentação do Grupo 2 (2026.1)](docs/anexos/C-documentacao-grupo-2-2026-1.pdf) | Referência |
 
-## Como rodar (v5.0 — Sprint 1)
+## Como rodar a base atual (v4.0 — Equipe 6 + Grupo 2)
 
-### Caminho rápido: Docker
+Instruções herdadas e corrigidas. A Sprint 1 substitui isto por `docker compose up` (item B12).
 
-Pré-requisitos: Docker Desktop (com WSL2 no Windows) e Google Chrome.
-Não é preciso ter Python instalado — a imagem do backend já usa Python 3.11.
+Backend — Python 3.11 ou 3.12 (obrigatório): esta versão do projeto suporta somente Python 3.11 e 3.12, devido à dependência de áudio utilizada pela diarização. Python 3.13 ou superior não é suportado.
 
-```bash
-cp API/.env.example API/.env
-```
-
-Preencha em `API/.env` no mínimo `GEMINI_API_KEY`, `AUTH_SECRET_KEY` e
-`AUTH_BOOTSTRAP_EMAIL` / `AUTH_BOOTSTRAP_PASSWORD`. Sem `AUTH_SECRET_KEY` toda
-rota autenticada responde 500; sem `AUTH_BOOTSTRAP_*` nenhum administrador é
-criado e ninguém consegue entrar (D‑22/D‑23). O arquivo está no `.gitignore`.
-
-```bash
-docker compose up -d --build
-```
-
-Sobe três serviços:
-
-| Serviço | Endereço | O que é |
-|---|---|---|
-| `copmed-web` | http://localhost:8080 | Sistema gerenciador (login, pacientes, admin) |
-| `backend` | http://localhost:3001 | API Flask (`/api/health` para checagem) |
-| `db` | localhost:5432 | PostgreSQL |
-
-> **Nota sobre o PostgreSQL:** o banco já sobe e `DB_URL` já é lido por
-> `backend/config.py`, mas a persistência da aplicação ainda é o arquivo JSON
-> `backend/patients_db.json`. A migração é um item posterior do backlog; o
-> serviço existe para que ela não exija mudar a infraestrutura de novo.
-
-Os dados JSON ficam no volume `backend_data`, então sobrevivem a `--build`.
-
-### Extensão Chrome
-
-A extensão **não** é servida pelo Docker: ela depende das APIs `chrome.*` e
-precisa ser carregada como extensão de verdade. Aberta como página web comum,
-ela trava em "Validando sessão...".
-
-```bash
-cd front/copmed-extension && npm install && npm run build
-```
-
-Em `chrome://extensions`, ative o **Modo desenvolvedor**, clique em **Carregar
-sem compactação** e selecione `front/copmed-extension/dist`. Para gravar áudio,
-libere o Microfone nas permissões da extensão.
-
-### Rodando sem Docker
-
-**Backend — Python 3.11 ou 3.12 (obrigatório).** Esta versão do projeto suporta
-somente Python 3.11 e 3.12, devido à dependência de áudio (`audioop`) usada pela
-diarização. Python 3.13 ou superior **não é suportado**. Confirme antes de
-instalar:
-
-```bash
 python --version
-```
 
-A versão deve ser `3.11.x` ou `3.12.x`. Em seguida:
-
-```bash
-cd API && pip install -r requirements.txt && python -m spacy download pt_core_news_lg
-```
-
-Os modelos Vosk não são mais versionados (o clone caiu de ~67 MB para menos de
-5 MB). Baixe-os com o script idempotente:
+A versão deve ser Python 3.11.x ou Python 3.12.x.
 
 ```bash
-python scripts/download_models.py
+cd API
+pip install -r requirements.txt
+python -m spacy download pt_core_news_lg
 ```
+
+Crie `API/backend/.env` (ou `API/.env`) com, no mínimo:
+
+```env
+GEMINI_API_KEY=<sua chave>
+AUTH_SECRET_KEY=<string aleatória longa>
+AUTH_BOOTSTRAP_EMAIL=admin@exemplo.local
+AUTH_BOOTSTRAP_PASSWORD=<senha forte>
+CORS_ORIGINS=http://localhost:5174
+```
+
+Sem `AUTH_SECRET_KEY` toda rota autenticada responde 401; sem `AUTH_BOOTSTRAP_*` nenhum administrador é criado e ninguém consegue entrar (D‑22/D‑23). O arquivo está no `.gitignore`; nunca commitar. Os modelos Vosk (`API/backend/vosk-model-small-pt-0.3` e `vosk-model-spk-0.4`) ainda vêm no repositório; a Sprint 1 os move para download por script (B13).
+
+Para criar ou verificar o administrador inicial, com `AUTH_BOOTSTRAP_EMAIL` e `AUTH_BOOTSTRAP_PASSWORD` configurados, execute a partir da raiz do projeto:
+
+```bash
+python .\API\bootstrap_admin.py
+```
+
+O script n?o cria um usu?rio duplicado caso o administrador informado j? exista.
 
 ```bash
 python server.py
@@ -123,30 +86,29 @@ python server.py
 
 Servidor em `http://localhost:3001`.
 
-Sistema gerenciador web:
+**Extensão:**
 
 ```bash
-cd front/copmed-web && npm install && npm run dev
+cd front/copmed-extension
+npm install
+npm run build
 ```
 
-Abre em `http://localhost:5174`. Entre com o e‑mail/senha do bootstrap e perfil
-`administrador`; médicos se cadastram na aba "Cadastrar médico" e ficam
-pendentes até o admin aprovar em **Médicos**.
+Em `chrome://extensions`, ative o Modo desenvolvedor, clique em "Carregar sem compactação" e selecione a pasta `dist`. Para gravar áudio, em "Mais opções" da extensão → permissões → Microfone → Permitir.
 
-### Testes
+**Sistema gerenciador web:**
 
 ```bash
-cd API && pip install -r requirements-dev.txt && pytest
+cd front/copmed-web
+npm install
+npm run dev
 ```
 
-40 testes em 6 arquivos. As dependências pesadas (vosk, spaCy, numpy,
-speech_recognition) são substituídas por stubs no `tests/conftest.py`, então a
-suíte roda em segundos e **não** precisa dos modelos Vosk — é o que permite
-rodá-la no CI.
+Abre em `http://localhost:5174`. Entre com o e‑mail/senha do bootstrap e perfil `administrador`; médicos se cadastram na aba "Cadastrar médico" e ficam pendentes até o admin aprovar em **Médicos**. Nesta versão um médico aprovado ainda não vê os pacientes de exemplo (D‑24).
 
-**Conhecido e quebrado nesta versão:** a extração do Amplimed usa dois conjuntos
-de seletores divergentes (D‑01); a diarização está em modo de teste (D‑03);
-médicos não veem os pacientes legados (D‑24).
+**Docker (só backend):** crie `.env` na raiz com as mesmas variáveis e rode `docker compose up --build` (o compose ainda não sobe a web — B12).
+
+**Conhecido e quebrado nesta versão:** a extração do Amplimed usa dois conjuntos de seletores divergentes (D‑01); a diarização está em modo de teste (D‑03); médicos não veem os pacientes legados (D‑24); 16 testes quebram por 401 (D‑17). Todos são itens das Sprints 0–1.
 
 ## Validação do README
 
