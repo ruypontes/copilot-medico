@@ -10,7 +10,8 @@ import speech_recognition as sr
 from backend import gemini_connection
 from backend import pdf_reader
 from backend import pep_import
-from backend import text_filter
+from backend.anonimizacao import anonimizar
+from backend.anonimizacao import servico as anonimizacao_servico
 from backend.openapi import build_openapi_spec
 from backend.pep_import import PepImportError
 from backend.auth_decorators import roles_required, token_required
@@ -36,6 +37,7 @@ from backend.config import settings
 from repositories import (
     ConsultaRepository,
     DadoExtensaoRepository,
+    MapaAnonimizacaoRepository,
     MedicoNaoEncontrado,
     MensagemRepository,
     PacienteRepository,
@@ -68,7 +70,7 @@ def _encerrar_sessao_do_banco(_exc):
 
 
 def _pacientes():
-    return PacienteRepository(sessao.obter_sessao())
+    return PacienteRepository(sessao.obter_sessao(), _cofre_atual())
 
 
 def _consultas():
@@ -81,6 +83,45 @@ def _mensagens():
 
 def _transcricoes():
     return TranscricaoRepository(sessao.obter_sessao())
+
+
+def _mapas_anonimizacao():
+    return MapaAnonimizacaoRepository(sessao.obter_sessao())
+
+
+def _token_da_requisicao():
+    """Token bruto do header; e a chave do cofre aberto nesta sessao (B26)."""
+    cabecalho = request.headers.get("Authorization", "")
+    if not cabecalho.startswith("Bearer "):
+        return None
+    return cabecalho.removeprefix("Bearer ").strip() or None
+
+
+def _cofre_atual():
+    return anonimizacao_servico.cofre_da_sessao(_token_da_requisicao())
+
+
+def _anonimizar_para_envio(texto, patient_id=None, consultation_id=None):
+    """Prepara texto para sair da maquina e devolve (texto, mapa) (US016-CA001).
+
+    O mapa da consulta e carregado antes e regravado depois, o que mantem os
+    tokens estaveis entre mensagens (B25). Sem cofre aberto o mapa nao e
+    persistido - a camada regex continua protegendo o payload, mas os tokens
+    recomecam a cada requisicao.
+    """
+    cofre = _cofre_atual()
+    mapa = _mapas_anonimizacao().carregar(consultation_id, cofre) if consultation_id else None
+
+    paciente = _pacientes().obter(patient_id) if patient_id else None
+    resultado = anonimizar(
+        texto,
+        mapa,
+        nomes_conhecidos=anonimizacao_servico.nomes_do_cadastro(paciente),
+    )
+
+    if consultation_id:
+        _mapas_anonimizacao().salvar(consultation_id, resultado.mapa, cofre)
+    return resultado.texto, resultado.mapa
 
 
 def _dados_extensao():
@@ -292,7 +333,33 @@ def login():
     except AuthError as exc:
         return _json_error(exc.message, exc.status_code)
 
+    # Cofre de cifra (B26): este e o unico momento em que a senha em claro
+    # passa pelo servidor, logo o unico em que a DEK pode ser desembrulhada.
+    # Dai em diante so a chave aberta vive em memoria, ate o logout.
+    try:
+        cofre = anonimizacao_servico.abrir_ou_criar_cofre(
+            sessao.obter_sessao(), user.get("id"), password
+        )
+        anonimizacao_servico.registrar_sessao(token, cofre)
+    except Exception as erro:
+        # Falha de cifra nao pode impedir o login: a camada regex continua
+        # protegendo o payload externo mesmo sem cofre.
+        print(f"[ANONIMIZACAO] Nao foi possivel preparar o cofre do medico: {erro}")
+
     return _auth_success_response(user, requested_profile, token, expires_in)
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+@token_required
+def logout():
+    """Descarta a chave de dados da memoria (B26).
+
+    Ate aqui o logout era so do lado do cliente, que apagava o token do
+    chrome.storage. A DEK desembrulhada, porem, continuava no servidor ate
+    o processo morrer. Esta rota fecha esse ciclo.
+    """
+    anonimizacao_servico.encerrar_sessao(_token_da_requisicao())
+    return jsonify({"status": "success", "message": "Sessao encerrada."}), 200
 
 
 @app.route('/api/auth/register-doctor', methods=['POST'])
@@ -654,21 +721,28 @@ def handle_chat_message():
 
         print(f"\nMensagem recebida para Paciente ID {patient_id}, Consulta ID {consultation_id}: {user_message}")
 
-        filtered_user_message = text_filter.remover_nomes(user_message)
-        
-        # Adiciona a mensagem ao histórico da consulta específica
-        _mensagens().adicionar(consultation_id, "user", filtered_user_message if filtered_user_message else user_message)
+        # Anonimiza antes de qualquer saida (US016-CA001). O texto guardado
+        # e o tokenizado: a coluna chama-se `conteudo_pseudonimizado`.
+        # O fallback antigo ("se o filtro esvaziou, grava o original")
+        # gravava PII justamente quando a anonimizacao era mais agressiva;
+        # com tokens o texto nunca fica vazio, entao ele deixou de existir.
+        texto_anonimo, mapa = _anonimizar_para_envio(
+            user_message, patient_id, consultation_id
+        )
 
-        # Recuperar o histórico da consulta para enviar ao Gemini
-        # A função send_message agora lida com o histórico da consulta
-        ai_response_text = gemini_connection.send_message(patient_id, consultation_id, filtered_user_message)
-        
-        # Adicionar a resposta da IA ao histórico da consulta
+        _mensagens().adicionar(consultation_id, "user", texto_anonimo)
+
+        ai_response_text = gemini_connection.send_message(
+            patient_id, consultation_id, texto_anonimo
+        )
+
+        # A resposta tambem fica tokenizada no banco; so a exibicao reidrata.
         _mensagens().adicionar(consultation_id, "model", ai_response_text)
-        
+
         response_data = {
             "status": "success",
-            "ai_response": ai_response_text,
+            # US016-CA002 / ADR-03: reidratado so aqui, na saida para o medico.
+            "ai_response": mapa.reidratar(ai_response_text),
             "consultation_id": consultation_id
         }
         if new_patient_id_generated:
@@ -745,11 +819,19 @@ def _register_pep_import(patient_id, consultation_id, data, require_typed=False)
             formatted_text = pep_import.format_for_prompt(normalized, source_url)
         else:
             formatted_text = _format_extension_extracted_data(extracted_content, source_url)
-        filtered_text = text_filter.remover_nomes(formatted_text) or formatted_text
+        # Dado raspado do prontuario e o caminho mais provavel de PII
+        # entrar no sistema: anonimiza antes de persistir ou enviar.
+        texto_anonimo, mapa = _anonimizar_para_envio(
+            formatted_text, patient_id, consultation_id
+        )
 
-        _mensagens().adicionar(consultation_id, "user", filtered_text)
-        ai_response_text = gemini_connection.send_message(patient_id, consultation_id, filtered_text)
+        _mensagens().adicionar(consultation_id, "user", texto_anonimo)
+        ai_response_text = gemini_connection.send_message(
+            patient_id, consultation_id, texto_anonimo
+        )
         _mensagens().adicionar(consultation_id, "model", ai_response_text)
+        # Reidrata so o que volta para a tela do medico.
+        ai_response_text = mapa.reidratar(ai_response_text)
 
         response = {
             "status": "success",
@@ -872,18 +954,23 @@ def upload_pdf():
         if not extracted_text.strip():
             return jsonify({"status": "error", "message": "Texto extraído está vazio."}), 400
 
-        filtered_extracted_text = text_filter.remover_nomes(extracted_text)
-        
-        context_message_for_pdf = f"O seguinte texto foi extraído de um PDF enviado pelo usuário: \"{filtered_extracted_text}\". Por favor, analise-o e responda às perguntas subsequentes ou forneça um resumo, conforme apropriado."
-        
+        # PDF de exame costuma trazer nome, CPF e data de nascimento no
+        # cabecalho: anonimiza antes de montar o contexto do modelo.
+        texto_anonimo, mapa = _anonimizar_para_envio(
+            extracted_text, patient_id, consultation_id
+        )
+
+        context_message_for_pdf = f"O seguinte texto foi extraído de um PDF enviado pelo usuário: \"{texto_anonimo}\". Por favor, analise-o e responda às perguntas subsequentes ou forneça um resumo, conforme apropriado."
+
         # Adiciona a mensagem ao histórico da consulta
         _mensagens().adicionar(consultation_id, "user", context_message_for_pdf)
-        
+
         # A assinatura correta é send_message(patient_id: str, consultation_id: str, message_text: str)
         ai_response_text = gemini_connection.send_message(patient_id, consultation_id, context_message_for_pdf)
-        
+
         # Adiciona a resposta da IA ao histórico da consulta
         _mensagens().adicionar(consultation_id, "model", ai_response_text)
+        ai_response_text = mapa.reidratar(ai_response_text)
 
         response_data = {
             "status": "success",

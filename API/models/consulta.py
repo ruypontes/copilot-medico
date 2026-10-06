@@ -7,7 +7,7 @@ consentimento (ON DELETE CASCADE no banco).
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, Uuid
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, LargeBinary, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CriadoEmMixin, UuidPkMixin, enum_column, utcnow
@@ -71,3 +71,30 @@ class Consentimento(Base):
     )
     versao_texto: Mapped[str] = mapped_column(String(32), nullable=False)
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class MapaAnonimizacaoConsulta(Base):
+    """Mapa token -> valor real de uma consulta, cifrado (B26 / US016-CA002).
+
+    E o que torna os tokens ESTAVEIS POR CONSULTA (B25): sem persistir o
+    mapa, cada requisicao recomecaria do `[CPF_1]` e o mesmo paciente teria
+    tokens diferentes a cada mensagem.
+
+    O conteudo e cifrado com a DEK do medico (AES-GCM), mesmo envelope da
+    tabela `pseudonimo`. Linhas antigas com `algoritmo_cifra = "none"`
+    guardam JSON em texto e sao recifradas na proxima escrita.
+    """
+
+    __tablename__ = "mapa_anonimizacao"
+
+    # 1:1 com a consulta.
+    consulta_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("consulta.id", ondelete="CASCADE"), primary_key=True
+    )
+    dados_cifrados: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    algoritmo_cifra: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="none"
+    )
+    atualizado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
