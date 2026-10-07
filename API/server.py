@@ -1,7 +1,4 @@
-import sys
 import os
-import json
-import uuid
 from datetime import datetime
 
 from flask import Flask, g, request, jsonify
@@ -12,7 +9,11 @@ import speech_recognition as sr
 # Assuming these imports are correct and available
 from backend import gemini_connection
 from backend import pdf_reader
-from backend import text_filter
+from backend import pep_import
+from backend.anonimizacao import MapaAnonimizacao, anonimizar, anonimizar_estrutura
+from backend.anonimizacao import servico as anonimizacao_servico
+from backend.openapi import build_openapi_spec
+from backend.pep_import import PepImportError
 from backend.auth_decorators import roles_required, token_required
 from backend.auth_service import (
     AuthError,
@@ -32,15 +33,17 @@ from backend.auth_service import (
 )
 from backend.config import settings
 
-# Importa TODAS as funções do seu patient_db.py
-from backend.patient_db import (
-    load_database, save_database, generate_patient_id, get_patient_data, 
-    get_all_patients_info, ensure_patient_exists, get_patient_chat_history, 
-    add_message_to_history, add_consultation_to_patient, get_patient_consultations, 
-    get_consultation_chat_history, add_message_to_consultation_history, add_transcription_log_to_patient,
-    get_patient_transcription_log, add_extension_data_to_patient, get_patient_extension_data,
-    consultation_belongs_to_patient
-    )
+# Camada de dados (B20): um repositorio por entidade, no banco de DB_URL.
+from repositories import (
+    ConsultaRepository,
+    DadoExtensaoRepository,
+    MapaAnonimizacaoRepository,
+    MedicoNaoEncontrado,
+    MensagemRepository,
+    PacienteRepository,
+    TranscricaoRepository,
+    sessao,
+)
 from backend.processador_voz.processador_voz import TranscritorVoz
 from backend.audio_service import Diarizador
 
@@ -60,6 +63,105 @@ CORS(
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 )
 
+
+@app.teardown_appcontext
+def _encerrar_sessao_do_banco(_exc):
+    sessao.encerrar_sessao()
+
+
+def _pacientes():
+    return PacienteRepository(sessao.obter_sessao(), _cofre_atual())
+
+
+def _consultas():
+    return ConsultaRepository(sessao.obter_sessao())
+
+
+def _mensagens():
+    return MensagemRepository(sessao.obter_sessao())
+
+
+def _transcricoes():
+    return TranscricaoRepository(sessao.obter_sessao())
+
+
+def _mapas_anonimizacao():
+    return MapaAnonimizacaoRepository(sessao.obter_sessao())
+
+
+def _token_da_requisicao():
+    """Token bruto do header; e a chave do cofre aberto nesta sessao (B26)."""
+    cabecalho = request.headers.get("Authorization", "")
+    if not cabecalho.startswith("Bearer "):
+        return None
+    return cabecalho.removeprefix("Bearer ").strip() or None
+
+
+def _cofre_atual():
+    return anonimizacao_servico.cofre_da_sessao(_token_da_requisicao())
+
+
+def _anonimizar_para_envio(texto, patient_id=None, consultation_id=None):
+    """Prepara texto para sair da maquina e devolve (texto, mapa) (US016-CA001).
+
+    O mapa da consulta e carregado antes e regravado depois, o que mantem os
+    tokens estaveis entre mensagens (B25). Sem cofre aberto o mapa nao e
+    persistido - a camada regex continua protegendo o payload, mas os tokens
+    recomecam a cada requisicao.
+    """
+    cofre = _cofre_atual()
+    mapa = _mapas_anonimizacao().carregar(consultation_id, cofre) if consultation_id else None
+
+    paciente = _pacientes().obter(patient_id) if patient_id else None
+    resultado = anonimizar(
+        texto,
+        mapa,
+        nomes_conhecidos=anonimizacao_servico.nomes_do_cadastro(paciente),
+    )
+
+    if consultation_id:
+        _mapas_anonimizacao().salvar(consultation_id, resultado.mapa, cofre)
+    return resultado.texto, resultado.mapa
+
+
+def _anonimizar_conteudo_extensao(conteudo, patient_id=None, consultation_id=None):
+    """Anonimiza a estrutura raspada do prontuario antes de PERSISTI-LA (B69).
+
+    `_anonimizar_para_envio` cobre o texto que sai para o LLM; este cobre o
+    que fica no banco. Sao caminhos diferentes do mesmo dado: a estrutura vai
+    para `dado_extensao.conteudo` e o texto formatado vai para `mensagem`.
+
+    O mapa da consulta e carregado uma vez e reaproveitado em todos os campos,
+    para que o mesmo CPF receba o mesmo token em toda a estrutura - e o mesmo
+    token que a mensagem enviada ao modelo vai usar.
+    """
+    cofre = _cofre_atual()
+    # Um unico mapa para TODOS os campos. Sem consulta ele comeca vazio em vez
+    # de None: passar None faria `anonimizar` criar um mapa novo por campo, e
+    # o mesmo CPF receberia tokens diferentes dentro da mesma estrutura.
+    mapa = (
+        _mapas_anonimizacao().carregar(consultation_id, cofre)
+        if consultation_id
+        else MapaAnonimizacao()
+    )
+    paciente = _pacientes().obter(patient_id) if patient_id else None
+    nomes = anonimizacao_servico.nomes_do_cadastro(paciente)
+
+    def _anonimizar_campo(texto):
+        resultado = anonimizar(texto, mapa, nomes_conhecidos=nomes)
+        return resultado.texto, resultado.mapa
+
+    conteudo_anonimo, mapa_final = anonimizar_estrutura(conteudo, _anonimizar_campo)
+
+    if consultation_id and mapa_final is not None:
+        _mapas_anonimizacao().salvar(consultation_id, mapa_final, cofre)
+    return conteudo_anonimo
+
+
+def _dados_extensao():
+    return DadoExtensaoRepository(sessao.obter_sessao())
+
+
 audio_processor = None
 
 try:
@@ -68,7 +170,7 @@ try:
     MODEL_PATH = os.path.join(BASE_DIR, "backend", "vosk-model-small-pt-0.3")
     SPK_MODEL_PATH = os.path.join(BASE_DIR, "backend", "vosk-model-spk-0.4")
 
-    print(f"[SERVER] Carregando Modelos de IA...")
+    print("[SERVER] Carregando Modelos de IA...")
 
     # Inicializa a classe Diarizador (Vosk + Google)
     if os.path.exists(MODEL_PATH) and os.path.exists(SPK_MODEL_PATH):
@@ -100,10 +202,10 @@ def current_user_is_doctor():
 
 
 def patient_belongs_to_current_user(patient_id, patient_data=None):
-    # `patient_data` evita uma segunda leitura+parse do patients_db.json
-    # quando quem chama ja carregou o registro.
+    # `patient_data` evita uma segunda consulta ao banco quando quem chama ja
+    # carregou o registro.
     if patient_data is None:
-        patient_data = get_patient_data(patient_id)
+        patient_data = _pacientes().obter(patient_id)
     if not patient_data:
         return False
     if current_user_is_admin():
@@ -114,7 +216,7 @@ def patient_belongs_to_current_user(patient_id, patient_data=None):
 
 
 def require_patient_access(patient_id):
-    patient_data = get_patient_data(patient_id)
+    patient_data = _pacientes().obter(patient_id)
     if not patient_data:
         return None, _json_error("Paciente nao encontrado.", 404)
     if not patient_belongs_to_current_user(patient_id, patient_data):
@@ -267,7 +369,33 @@ def login():
     except AuthError as exc:
         return _json_error(exc.message, exc.status_code)
 
+    # Cofre de cifra (B26): este e o unico momento em que a senha em claro
+    # passa pelo servidor, logo o unico em que a DEK pode ser desembrulhada.
+    # Dai em diante so a chave aberta vive em memoria, ate o logout.
+    try:
+        cofre = anonimizacao_servico.abrir_ou_criar_cofre(
+            sessao.obter_sessao(), user.get("id"), password
+        )
+        anonimizacao_servico.registrar_sessao(token, cofre)
+    except Exception as erro:
+        # Falha de cifra nao pode impedir o login: a camada regex continua
+        # protegendo o payload externo mesmo sem cofre.
+        print(f"[ANONIMIZACAO] Nao foi possivel preparar o cofre do medico: {erro}")
+
     return _auth_success_response(user, requested_profile, token, expires_in)
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+@token_required
+def logout():
+    """Descarta a chave de dados da memoria (B26).
+
+    Ate aqui o logout era so do lado do cliente, que apagava o token do
+    chrome.storage. A DEK desembrulhada, porem, continuava no servidor ate
+    o processo morrer. Esta rota fecha esse ciclo.
+    """
+    anonimizacao_servico.encerrar_sessao(_token_da_requisicao())
+    return jsonify({"status": "success", "message": "Sessao encerrada."}), 200
 
 
 @app.route('/api/auth/register-doctor', methods=['POST'])
@@ -405,7 +533,7 @@ def transcribe_audio_route():
         if access_error:
             return access_error
 
-        if consultation_id and not consultation_belongs_to_patient(patient_id, consultation_id):
+        if consultation_id and not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return jsonify({"status": "error", "message": "Consulta nao encontrada para este paciente."}), 404
 
         file_ext = '.wav'
@@ -427,7 +555,7 @@ def transcribe_audio_route():
 
         if audio_processor:
             try:
-                print(f"[TRANSCRIÇÃO] Iniciando Diarização (Vosk + Google)...")
+                print("[TRANSCRIÇÃO] Iniciando Diarização (Vosk + Google)...")
                 # Aqui chamamos sua classe Diarizador
                 result = audio_processor.processar_audio(tmp_path)
 
@@ -447,7 +575,7 @@ def transcribe_audio_route():
 
         # 4. Fallback (Transcrição Simples) se o Diarizador falhar ou não existir
         if not processed_successfully:
-            print(f"[TRANSCRIÇÃO] Usando Transcritor Simples (Legacy)...")
+            print("[TRANSCRIÇÃO] Usando Transcritor Simples (Legacy)...")
             try:
                 transcritor = TranscritorVoz(idioma="pt-BR")
                 with sr.AudioFile(tmp_path) as source:
@@ -475,18 +603,18 @@ def transcribe_audio_route():
             }), 200
 
         # 6. Salvar no Banco (Com o novo campo 'dialogue')
-        log_entry = add_transcription_log_to_patient(
-            patient_id=patient_id,
-            consultation_id=consultation_id,
-            text=texto_final,
-            duration_seconds=final_duration if final_duration > 0 else 1.0,
-            source=request.form.get('source') or "extension",
-            audio_metadata={
+        log_entry = _transcricoes().adicionar(
+            patient_id,
+            consultation_id,
+            texto=texto_final,
+            duracao_s=final_duration if final_duration > 0 else 1.0,
+            origem=request.form.get('source') or "extension",
+            metadados_audio={
                 "persisted": False,
                 "filename": audio_file.filename,
                 "content_type": audio_file.content_type,
             },
-            dialogue=dialogue_structure  # <--- O PULO DO GATO ESTÁ AQUI
+            turnos=dialogue_structure,  # Estrutura rica (Medico/Paciente) da diarizacao
         )
 
         return jsonify({
@@ -515,7 +643,7 @@ def get_transcription_log_api(patient_id):
         _patient_data, access_error = require_patient_access(patient_id)
         if access_error:
             return access_error
-        logs = get_patient_transcription_log(patient_id) # Função do seu patient_db
+        logs = _transcricoes().listar(patient_id)
         return jsonify({
             "status": "success",
             "logs": logs,
@@ -534,7 +662,7 @@ def check_patient_exists_api(patient_id):
     Retorna JSON com 'exists': true/false.
     """
     try:
-        patient_data = get_patient_data(patient_id) 
+        patient_data = _pacientes().obter(patient_id)
         exists = patient_data is not None
         if exists and not patient_belongs_to_current_user(patient_id, patient_data):
             return _json_error("Acesso negado ao paciente.", 403)
@@ -559,16 +687,15 @@ def create_patient():
         patient_name = data.get('name')
         doctor_id = _patient_owner_for_new_record(data)
 
-        new_patient_id = generate_patient_id()
-        patient_data = ensure_patient_exists(
-            new_patient_id,
-            name=patient_name,
-            doctor_id=doctor_id,
-            created_by=g.current_user.get("id"),
+        patient_data = _pacientes().criar(
+            nome=patient_name,
+            medico_id=doctor_id,
+            criado_por_id=g.current_user.get("id"),
         )
-        
+        new_patient_id = patient_data["id"]
+
         # Adiciona a primeira "consulta" padrão ao criar o paciente
-        first_consultation_id = add_consultation_to_patient(new_patient_id, "Primeira Consulta")
+        first_consultation_id = _consultas().criar(new_patient_id, "Primeira Consulta")
 
         return jsonify({
             "status": "success",
@@ -578,6 +705,8 @@ def create_patient():
             "first_consultation_id": first_consultation_id
         }), 201 # 201 Created
 
+    except MedicoNaoEncontrado as e:
+        return _json_error(str(e), 400)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -600,15 +729,12 @@ def handle_chat_message():
         new_patient_id_generated = None
 
         if not patient_id: # Se não tem patient_id, cria um novo
-            patient_id = generate_patient_id()
+            patient_id = _pacientes().criar(
+                nome="Desconhecido",
+                medico_id=_patient_owner_for_new_record(data),
+                criado_por_id=g.current_user.get("id"),
+            )["id"]
             new_patient_id_generated = patient_id
-            ensure_patient_exists(
-                patient_id,
-                name="Desconhecido",
-                doctor_id=_patient_owner_for_new_record(data),
-                created_by=g.current_user.get("id"),
-            )
-            # Não é necessário load_database() aqui, pois ensure_patient_exists já salva.
 
         # Se não tem consultation_id, ou se o paciente é novo, cria uma primeira consulta
         if patient_id and not new_patient_id_generated:
@@ -617,35 +743,42 @@ def handle_chat_message():
                 return access_error
 
         if not consultation_id:
-            patient_consultations = get_patient_consultations(patient_id)
+            patient_consultations = _consultas().listar(patient_id)
             if patient_consultations:
                 # Assumindo que a primeira consulta é a desejada. Você pode querer uma lógica de ordenação.
                 consultation_id = patient_consultations[0]["id"] 
             else:
-                consultation_id = add_consultation_to_patient(patient_id, "Consulta Inicial (Chat)")
+                consultation_id = _consultas().criar(patient_id, "Consulta Inicial (Chat)")
                 if not consultation_id:
                     raise Exception("Falha ao criar consulta para o paciente.")
 
-        if consultation_id and not consultation_belongs_to_patient(patient_id, consultation_id):
+        if consultation_id and not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return _json_error("Consulta nao encontrada para este paciente.", 404)
 
         print(f"\nMensagem recebida para Paciente ID {patient_id}, Consulta ID {consultation_id}: {user_message}")
 
-        filtered_user_message = text_filter.remover_nomes(user_message)
-        
-        # Adiciona a mensagem ao histórico da consulta específica
-        add_message_to_consultation_history(patient_id, consultation_id, "user", filtered_user_message if filtered_user_message else user_message)
+        # Anonimiza antes de qualquer saida (US016-CA001). O texto guardado
+        # e o tokenizado: a coluna chama-se `conteudo_pseudonimizado`.
+        # O fallback antigo ("se o filtro esvaziou, grava o original")
+        # gravava PII justamente quando a anonimizacao era mais agressiva;
+        # com tokens o texto nunca fica vazio, entao ele deixou de existir.
+        texto_anonimo, mapa = _anonimizar_para_envio(
+            user_message, patient_id, consultation_id
+        )
 
-        # Recuperar o histórico da consulta para enviar ao Gemini
-        # A função send_message agora lida com o histórico da consulta
-        ai_response_text = gemini_connection.send_message(patient_id, consultation_id, filtered_user_message)
-        
-        # Adicionar a resposta da IA ao histórico da consulta
-        add_message_to_consultation_history(patient_id, consultation_id, "model", ai_response_text)
-        
+        _mensagens().adicionar(consultation_id, "user", texto_anonimo)
+
+        ai_response_text = gemini_connection.send_message(
+            patient_id, consultation_id, texto_anonimo
+        )
+
+        # A resposta tambem fica tokenizada no banco; so a exibicao reidrata.
+        _mensagens().adicionar(consultation_id, "model", ai_response_text)
+
         response_data = {
             "status": "success",
-            "ai_response": ai_response_text,
+            # US016-CA002 / ADR-03: reidratado so aqui, na saida para o medico.
+            "ai_response": mapa.reidratar(ai_response_text),
             "consultation_id": consultation_id
         }
         if new_patient_id_generated:
@@ -653,37 +786,49 @@ def handle_chat_message():
 
         return jsonify(response_data), 200
 
+    except MedicoNaoEncontrado as e:
+        return _json_error(str(e), 400)
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Erro interno do servidor: {e}"}), 500
 
 
-def _handle_extension_extracted_data_request():
-    try:
-        data = request.get_json(silent=True)
-        if not isinstance(data, dict):
-            return _json_error("Corpo JSON invalido.", 400)
+def _register_pep_import(patient_id, consultation_id, data, require_typed=False):
+    """Nucleo compartilhado das rotas de importacao do PEP (B07).
 
-        patient_id = _payload_value(data, "patient_id", "patientId")
-        consultation_id = _payload_value(data, "consultation_id", "consultationId")
+    Aceita o corpo tipado (`pep_origem` + `campos`) ou, nas rotas legadas, o formato
+    livre (`extracted_content` / `extracted_data`). Em ambos a consulta e obrigatoria.
+    """
+    try:
         source_url = _payload_value(data, "source_url", "sourceUrl")
         created_at = _payload_value(data, "created_at", "createdAt")
-        raw_content = _payload_value(data, "extracted_content", "extractedData", "extracted_data")
 
         if not isinstance(patient_id, str) or not patient_id.strip():
             return _json_error("patient_id e obrigatorio.", 400)
+        if not isinstance(consultation_id, str) or not consultation_id.strip():
+            return _json_error("consultation_id e obrigatorio.", 400)
         if source_url is not None and not isinstance(source_url, str):
             return _json_error("source_url deve ser texto.", 400)
         if created_at is not None and not isinstance(created_at, str):
             return _json_error("created_at deve ser texto.", 400)
 
-        extracted_content, content_error = _normalize_extension_content(raw_content)
-        if content_error:
-            return _json_error(content_error, 400)
+        typed = require_typed or "campos" in data
+        normalized = None
+        if typed:
+            try:
+                normalized = pep_import.parse_pep_import(data)
+            except PepImportError as exc:
+                return _json_error(str(exc), 400)
+            extracted_content = normalized["campos"]
+        else:
+            raw_content = _payload_value(data, "extracted_content", "extractedData", "extracted_data")
+            extracted_content, content_error = _normalize_extension_content(raw_content)
+            if content_error:
+                return _json_error(content_error, 400)
 
         patient_id = patient_id.strip()
-        consultation_id = _optional_text(consultation_id)
+        consultation_id = consultation_id.strip()
         source_url = _optional_text(source_url)
         created_at = _optional_text(created_at)
 
@@ -691,40 +836,92 @@ def _handle_extension_extracted_data_request():
         if access_error:
             return access_error
 
-        if consultation_id and not consultation_belongs_to_patient(patient_id, consultation_id):
+        if not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return _json_error("Consulta nao encontrada.", 404)
 
-        extension_entry = add_extension_data_to_patient(
-            patient_id=patient_id,
-            consultation_id=consultation_id,
-            source_url=source_url,
-            content=text_filter.anonymize_extracted_content(extracted_content),
-            created_at=created_at,
+        # B69: a estrutura crua tambem e persistida, entao anonimizar apenas o
+        # texto que vai ao LLM deixava nome e CPF em claro em `dado_extensao`.
+        # O conteudo passa pelo anonimizador ANTES de ser gravado, usando o
+        # mapa da consulta - assim o token de um CPF e o mesmo aqui e na
+        # mensagem enviada ao modelo.
+        conteudo_anonimo = _anonimizar_conteudo_extensao(
+            extracted_content, patient_id, consultation_id
+        )
+
+        extension_entry = _dados_extensao().adicionar(
+            patient_id,
+            conteudo_anonimo,
+            consulta_id=consultation_id,
+            url_origem=source_url,
+            criado_em=created_at,
+            tipo="pep_import" if typed else "extracted_data",
+            pep_origem=normalized["pep_origem"] if typed else None,
         )
         if not extension_entry:
             return _json_error("Falha ao salvar dados da extensao.", 500)
 
-        ai_response_text = None
-        if consultation_id:
+        if typed:
+            formatted_text = pep_import.format_for_prompt(normalized, source_url)
+        else:
             formatted_text = _format_extension_extracted_data(extracted_content, source_url)
-            filtered_text = text_filter.remover_nomes(formatted_text) or formatted_text
+        # Dado raspado do prontuario e o caminho mais provavel de PII
+        # entrar no sistema: anonimiza antes de persistir ou enviar.
+        texto_anonimo, mapa = _anonimizar_para_envio(
+            formatted_text, patient_id, consultation_id
+        )
 
-            add_message_to_consultation_history(patient_id, consultation_id, "user", filtered_text)
-            ai_response_text = gemini_connection.send_message(patient_id, consultation_id, filtered_text)
-            add_message_to_consultation_history(patient_id, consultation_id, "model", ai_response_text)
+        _mensagens().adicionar(consultation_id, "user", texto_anonimo)
+        ai_response_text = gemini_connection.send_message(
+            patient_id, consultation_id, texto_anonimo
+        )
+        _mensagens().adicionar(consultation_id, "model", ai_response_text)
+        # Reidrata so o que volta para a tela do medico.
+        ai_response_text = mapa.reidratar(ai_response_text)
 
-        return jsonify({
+        response = {
             "status": "success",
             "ai_response": ai_response_text,
             "patient_id": patient_id,
             "consultation_id": consultation_id,
-            "extension_data": extension_entry
-        }), 200
+            "extension_data": extension_entry,
+        }
+        if typed:
+            response["resumo"] = pep_import.summarize(normalized)
+        return jsonify(response), 200
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Erro interno ao processar dados da extensao: {e}"}), 500
+
+
+def _handle_extension_extracted_data_request():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+
+    patient_id = _payload_value(data, "patient_id", "patientId")
+    consultation_id = _payload_value(data, "consultation_id", "consultationId")
+    return _register_pep_import(patient_id, consultation_id, data)
+
+
+@app.route('/api/consultations/<consultation_id>/pep-import', methods=['POST'])
+@roles_required("administrador", "medico")
+def handle_pep_import(consultation_id):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+
+    patient_id = _consultas().paciente_da_consulta(consultation_id)
+    if not patient_id:
+        return _json_error("Consulta nao encontrada.", 404)
+
+    return _register_pep_import(patient_id, consultation_id, data, require_typed=True)
+
+
+@app.route('/api/openapi.json', methods=['GET'])
+def openapi_spec():
+    return jsonify(build_openapi_spec())
 
 
 @app.route('/api/extension/extracted-data', methods=['POST'])
@@ -750,9 +947,9 @@ def get_patient_extension_data_api(patient_id):
         return jsonify({
             "status": "success",
             "patient_id": patient_id,
-            "extension_data": get_patient_extension_data(patient_id),
+            "extension_data": _dados_extensao().listar(patient_id),
             "transcriptions": _normalize_transcriptions_for_extension_response(
-                get_patient_transcription_log(patient_id)
+                _transcricoes().listar(patient_id)
             )
         }), 200
     except Exception as e:
@@ -776,13 +973,11 @@ def upload_pdf():
         new_patient_id_generated = None
 
         if not patient_id:
-            patient_id = generate_patient_id()
+            patient_id = _pacientes().criar(
+                medico_id=_patient_owner_for_new_record({}),
+                criado_por_id=g.current_user.get("id"),
+            )["id"]
             new_patient_id_generated = patient_id
-            ensure_patient_exists(
-                patient_id,
-                doctor_id=_patient_owner_for_new_record({}),
-                created_by=g.current_user.get("id"),
-            )
         else:
             _patient_data, access_error = require_patient_access(patient_id)
             if access_error:
@@ -790,32 +985,37 @@ def upload_pdf():
         
         # Assegura que há uma consultation_id
         if not consultation_id:
-            patient_consultations = get_patient_consultations(patient_id)
+            patient_consultations = _consultas().listar(patient_id)
             if patient_consultations:
                 consultation_id = patient_consultations[0]["id"]
             else:
-                consultation_id = add_consultation_to_patient(patient_id, "Consulta de PDF")
+                consultation_id = _consultas().criar(patient_id, "Consulta de PDF")
                 if not consultation_id:
                     raise Exception("Falha ao criar consulta para o paciente durante upload de PDF.")
-        elif not consultation_belongs_to_patient(patient_id, consultation_id):
+        elif not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return _json_error("Consulta nao encontrada para este paciente.", 404)
 
         extracted_text = pdf_reader.extract_text_from_pdf(file)
         if not extracted_text.strip():
             return jsonify({"status": "error", "message": "Texto extraído está vazio."}), 400
 
-        filtered_extracted_text = text_filter.remover_nomes(extracted_text)
-        
-        context_message_for_pdf = f"O seguinte texto foi extraído de um PDF enviado pelo usuário: \"{filtered_extracted_text}\". Por favor, analise-o e responda às perguntas subsequentes ou forneça um resumo, conforme apropriado."
-        
+        # PDF de exame costuma trazer nome, CPF e data de nascimento no
+        # cabecalho: anonimiza antes de montar o contexto do modelo.
+        texto_anonimo, mapa = _anonimizar_para_envio(
+            extracted_text, patient_id, consultation_id
+        )
+
+        context_message_for_pdf = f"O seguinte texto foi extraído de um PDF enviado pelo usuário: \"{texto_anonimo}\". Por favor, analise-o e responda às perguntas subsequentes ou forneça um resumo, conforme apropriado."
+
         # Adiciona a mensagem ao histórico da consulta
-        add_message_to_consultation_history(patient_id, consultation_id, "user", context_message_for_pdf)
-        
+        _mensagens().adicionar(consultation_id, "user", context_message_for_pdf)
+
         # A assinatura correta é send_message(patient_id: str, consultation_id: str, message_text: str)
         ai_response_text = gemini_connection.send_message(patient_id, consultation_id, context_message_for_pdf)
-        
+
         # Adiciona a resposta da IA ao histórico da consulta
-        add_message_to_consultation_history(patient_id, consultation_id, "model", ai_response_text)
+        _mensagens().adicionar(consultation_id, "model", ai_response_text)
+        ai_response_text = mapa.reidratar(ai_response_text)
 
         response_data = {
             "status": "success",
@@ -864,7 +1064,10 @@ def handle_patient_consultations(patient_id):
                 })
 
                 for old_consultation_id in import_consultation_ids:
-                    old_history = get_consultation_chat_history(patient_id, old_consultation_id)
+                    # So importa consultas do proprio paciente.
+                    if not _consultas().pertence_ao_paciente(patient_id, old_consultation_id):
+                        continue
+                    old_history = _mensagens().historico(old_consultation_id)
                     if old_history:
                         initial_history.append({
                             "role": "model",
@@ -879,7 +1082,7 @@ def handle_patient_consultations(patient_id):
                         })
             
             # Chama a função para adicionar a nova consulta com o histórico inicial (se houver)
-            new_consultation_id = add_consultation_to_patient(patient_id, consultation_title, initial_history=initial_history)
+            new_consultation_id = _consultas().criar(patient_id, consultation_title, historico_inicial=initial_history)
 
             if new_consultation_id:
                 return jsonify({
@@ -899,7 +1102,7 @@ def handle_patient_consultations(patient_id):
     elif request.method == 'GET':
         # Lógica para OBTER a lista de consultas
         try:
-            consultations = get_patient_consultations(patient_id)
+            consultations = _consultas().listar(patient_id)
             return jsonify({"status": "success", "consultations": consultations}), 200
         except Exception as e:
             import traceback
@@ -917,9 +1120,9 @@ def get_consultation_history_api(patient_id, consultation_id):
         _patient_data, access_error = require_patient_access(patient_id)
         if access_error:
             return access_error
-        if not consultation_belongs_to_patient(patient_id, consultation_id):
+        if not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return _json_error("Consulta nao encontrada para este paciente.", 404)
-        history = get_consultation_chat_history(patient_id, consultation_id)
+        history = _mensagens().historico(consultation_id)
         if history is not None:
             return jsonify({"status": "success", "history": history}), 200
         else:
@@ -937,12 +1140,9 @@ def get_all_patients():
     """
     try:
         if current_user_is_admin():
-            patients_info = get_all_patients_info()
+            patients_info = _pacientes().listar()
         else:
-            patients_info = get_all_patients_info(
-                doctor_id=g.current_user.get("id"),
-                include_unassigned=False,
-            )
+            patients_info = _pacientes().listar(medico_id=g.current_user.get("id"))
         return jsonify({"status": "success", "patients": patients_info}), 200
     except Exception as e:
         import traceback
@@ -974,7 +1174,7 @@ def handle_recommendations():
         _patient_data, access_error = require_patient_access(patient_id)
         if access_error:
             return access_error
-        if not consultation_belongs_to_patient(patient_id, consultation_id):
+        if not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return _json_error("Consulta nao encontrada para este paciente.", 404)
 
         prompt_file_path = os.path.join(os.path.dirname(__file__), 'recommendations.txt')
@@ -1010,82 +1210,8 @@ def handle_recommendations():
 
 
 if __name__ == '__main__':
-    print("Servidor Flask com Gemini e DB de Paciente iniciado.")
-    
-    # GARANTA que a função add_consultation_to_patient no patient_db.py tem a assinatura:
-    # def add_consultation_to_patient(patient_id: str, consultation_title: str = None, consultation_date: str = None, initial_history: list[dict] = None):
-    # para que o argumento 'initial_history' seja reconhecido.
-
-    # Garante que o paciente "João Silva" exista
-    ensure_patient_exists("paciente_abc", "João Silva")
-    
-    # --- PRÉ-POPULAÇÃO DE DADOS CORRIGIDA ---
-    # Histórico para a primeira consulta pré-populada
-    history_consulta_1 = [
-        {
-            "role": "user",
-            "parts": [
-                {
-                    "text": "Paciente relatou dor de cabeça severa há 2 dias."
-                }
-            ],
-            "timestamp": datetime.now().isoformat()
-        },
-        {
-            "role": "model",
-            "parts": [
-                {
-                    "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
-                }
-            ],
-            "timestamp": datetime.now().isoformat()
-        },
-        {
-            "role": "user",
-            "parts": [
-                {
-                    "text": "Nível 8, latejante."
-                }
-            ],
-            "timestamp": datetime.now().isoformat()
-        }
-    ]
-    
-    # Cria a primeira consulta já com o histórico completo
-    id_consulta_1 = add_consultation_to_patient(
-        "paciente_abc", 
-        "Consulta Antiga 1 (Dor de Cabeça)", 
-        initial_history=history_consulta_1 # Passando o histórico inicial aqui
-    )
-
-    # Histórico para a segunda consulta pré-populada
-    history_consulta_2 = [
-        {
-            "role": "user",
-            "parts": [
-                {
-                    "text": "Febre de 39°C e tosse seca persistente."
-                }
-            ],
-            "timestamp": datetime.now().isoformat()
-        },
-        {
-            "role": "model",
-            "parts": [
-                {
-                    "text": "Há quanto tempo os sintomas estão presentes?"
-                }
-            ],
-            "timestamp": datetime.now().isoformat()
-        }
-    ]
-
-    # Cria a segunda consulta já com o histórico completo
-    id_consulta_2 = add_consultation_to_patient(
-        "paciente_abc", 
-        "Consulta Antiga 2 (Febre)", 
-        initial_history=history_consulta_2 # Passando o histórico inicial aqui
-    )
-    # --- FIM DA PRÉ-POPULAÇÃO DE DADOS CORRIGIDA ---
-
+    # Cria/atualiza as tabelas antes de subir (alembic upgrade head), no
+    # Docker e fora dele. O antigo seed do "Joao Silva" (D-09/D-24) saiu.
+    sessao.aplicar_migracoes()
+    print("Servidor Flask com Gemini e banco relacional iniciado.")
     app.run(host='0.0.0.0', port=3001, debug=True)

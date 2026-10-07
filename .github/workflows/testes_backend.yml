@@ -15,6 +15,27 @@ jobs:
     name: "pytest (API)"
     runs-on: ubuntu-latest
 
+    # PostgreSQL 16 (o mesmo do compose) para tests/test_migracoes.py aplicar
+    # a migracao tambem em Postgres (B19). Sem TEST_POSTGRES_URL esses casos
+    # sao pulados, e a suite continua rodando so em SQLite.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: copmed
+          POSTGRES_PASSWORD: copmed
+          POSTGRES_DB: copmed_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U copmed -d copmed_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_POSTGRES_URL: postgresql+psycopg://copmed:copmed@localhost:5432/copmed_test
+
     defaults:
       run:
         working-directory: ./API
@@ -37,8 +58,34 @@ jobs:
         # o CI nao baixa os modelos Vosk nem compila dependencias nativas.
         run: pip install -r requirements-dev.txt
 
-      - name: "4. Rodar a suíte de testes"
-        run: pytest tests/ -v --cov=backend --cov=server --cov-report=term-missing
+      - name: "4. Lint (ruff)"
+        # Regras E9 + F (ver API/ruff.toml): erros de sintaxe, nomes
+        # indefinidos e imports nao usados.
+        run: ruff check .
+
+      - name: "5. Rodar a suíte de testes com cobertura"
+        run: pytest tests/ -v --cov=backend --cov=server --cov=models --cov=repositories --cov-report=term-missing --cov-report=xml --cov-report=html
+
+      - name: "6. Resumo da cobertura"
+        if: always()
+        run: |
+          if [ -f coverage.xml ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          rate = float(ET.parse("coverage.xml").getroot().get("line-rate"))
+          print(f"### Cobertura do backend: {rate:.1%}")
+          PY
+          fi
+
+      - name: "7. Publicar relatório de cobertura"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-backend
+          path: |
+            API/coverage.xml
+            API/htmlcov/
+          if-no-files-found: ignore
 
   verificar-script-de-modelos:
     name: "Verificar script de download dos modelos (B13)"

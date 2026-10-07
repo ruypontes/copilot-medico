@@ -43,6 +43,20 @@ async function parseJson(response) {
   }
 }
 
+export class SessionExpiredError extends Error {
+  constructor() {
+    super('Sessão expirada. Entre novamente.');
+    this.name = 'SessionExpiredError';
+  }
+}
+
+let sessionExpiredHandler = null;
+
+// A UI registra aqui o que fazer quando a API responde 401 a uma requisicao autenticada.
+export function setSessionExpiredHandler(handler) {
+  sessionExpiredHandler = handler;
+}
+
 export async function apiRequest(path, { token, headers, ...options } = {}) {
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -52,6 +66,14 @@ export async function apiRequest(path, { token, headers, ...options } = {}) {
       ...headers,
     },
   });
+
+  // 401 com token = sessao vencida/invalida (B27). Sem token (login, cadastro) 401 e "senha
+  // errada" e segue como erro comum. A renovacao automatica entra junto da B22 (refresh no backend).
+  if (response.status === 401 && token) {
+    clearSession();
+    sessionExpiredHandler?.();
+    throw new SessionExpiredError();
+  }
 
   const data = await parseJson(response);
   if (!response.ok) {

@@ -7,6 +7,10 @@
 #   - copmed-web (sistema gerenciador) .. http://localhost:8080
 #   - backend (API Flask) .............. http://localhost:3001
 #   - db (PostgreSQL) .................. localhost:5432
+#   - esus-pec (opcional, perfil) ...... http://localhost:8081
+#
+# O e-SUS PEC fica fora da subida padrao. Para inclui-lo:
+#   docker compose --profile esus up -d
 #
 # A extensao Chrome NAO e servida aqui: ela depende das APIs chrome.* e
 # precisa ser carregada sem compactacao em chrome://extensions a partir de
@@ -45,8 +49,9 @@ services:
     env_file:
       - ./API/.env
     environment:
-      # Aponta os bancos JSON para o volume, senao os dados se perdem a cada
-      # `docker compose build`. Some quando a migracao para Postgres ocorrer.
+      # Os dados agora ficam no Postgres (B20). Os JSON antigos continuam no
+      # volume so para o script de migracao do B21 le-los; depois disso estas
+      # variaveis e o volume saem.
       PATIENTS_DB_FILE: /app/data/patients_db.json
       AUTH_USERS_DB_FILE: /app/data/users_db.json
     ports:
@@ -73,6 +78,28 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # e-SUS PEC 5.5.28 (opcional): so sobe com `docker compose --profile esus up -d`.
+  # Precisa do instalador .jar em ./esus-pec (ver docs/11-esus-pec.md).
+  #
+  # Nao declara `depends_on`: e um sistema externo, independente do backend.
+  # O `profiles` mantem o fluxo padrao leve - sao ~2,5 GB de memoria que so
+  # fazem sentido para quem esta trabalhando na integracao com o PEC.
+  esus-pec:
+    build:
+      context: ./esus-pec
+      dockerfile: Dockerfile
+    image: esus-pec:5.5.28
+    container_name: esus
+    profiles: ["esus"]
+    ports:
+      # 8081 no host: a 8080 ja e do copmed-web.
+      - "8081:8080"
+    mem_limit: 2560m
+    volumes:
+      - esus-pec-data:/opt/e-SUS/database/postgresql-9.6.13-1-linux-x64/data
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   backend_data:
+  esus-pec-data:

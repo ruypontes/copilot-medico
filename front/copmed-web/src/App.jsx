@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { clearSession, createPatient, getPatients, getStoredSession, storeSession } from './api';
+import {
+  clearSession,
+  createPatient,
+  getPatients,
+  getStoredSession,
+  setSessionExpiredHandler,
+  storeSession,
+} from './api';
 import Login from './components/Login.jsx';
 import Layout from './components/Layout.jsx';
 import Dashboard from './components/Dashboard.jsx';
@@ -21,6 +28,7 @@ const views = {
 function App() {
   const storedSession = useMemo(() => getStoredSession(), []);
   const [session, setSession] = useState(storedSession);
+  const [sessionNotice, setSessionNotice] = useState('');
   const [activeView, setActiveView] = useState('dashboard');
   const [patients, setPatients] = useState([]);
   const [patientsState, setPatientsState] = useState({ loading: false, error: '' });
@@ -48,8 +56,20 @@ function App() {
     loadPatients();
   }, [loadPatients]);
 
+  // B27: o apiRequest trata 401 de forma central (limpa a sessao) e avisa aqui,
+  // para a tela voltar ao login de qualquer pagina.
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      setSession({ token: null, user: null, profile: null });
+      setPatients([]);
+      setSessionNotice('Sessão expirada. Entre novamente.');
+    });
+    return () => setSessionExpiredHandler(null);
+  }, []);
+
   function handleLoginSuccess(nextSession) {
     storeSession(nextSession);
+    setSessionNotice('');
     setSession(nextSession);
     setActiveView(nextSession.profile?.name === 'administrador' ? 'medicos' : 'dashboard');
   }
@@ -67,7 +87,7 @@ function App() {
   }
 
   if (!authenticated) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return <Login onLoginSuccess={handleLoginSuccess} notice={sessionNotice} />;
   }
 
   const pageTitle = views[activeView]?.title || 'Dashboard';

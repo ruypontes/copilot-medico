@@ -16,7 +16,7 @@ const emptyRegisterForm = {
   specialty: '',
 };
 
-function Login({ onLoginSuccess }) {
+function Login({ onLoginSuccess, notice = '' }) {
   const [activeTab, setActiveTab] = useState('login');
   const [form, setForm] = useState({
     email: '',
@@ -26,7 +26,7 @@ function Login({ onLoginSuccess }) {
   const [registerForm, setRegisterForm] = useState(emptyRegisterForm);
   const [loading, setLoading] = useState(false);
   const [registerLoading, setRegisterLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(notice);
   const [success, setSuccess] = useState('');
 
   function updateField(field) {

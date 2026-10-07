@@ -72,12 +72,16 @@ Sobe três serviços:
 | `backend` | http://localhost:3001 | API Flask (`/api/health` para checagem) |
 | `db` | localhost:5432 | PostgreSQL |
 
-> **Nota sobre o PostgreSQL:** o banco já sobe e `DB_URL` já é lido por
-> `backend/config.py`, mas a persistência da aplicação ainda é o arquivo JSON
-> `backend/patients_db.json`. A migração é um item posterior do backlog; o
-> serviço existe para que ela não exija mudar a infraestrutura de novo.
-
-Os dados JSON ficam no volume `backend_data`, então sobrevivem a `--build`.
+> **Banco de dados:** pacientes, consultas, mensagens, transcrições, dados da
+> extensão e usuários ficam no PostgreSQL (B19: modelos em `API/models/` e
+> migrações Alembic em `API/migrations/`; B20: repositórios em
+> `API/repositories/`). O backend aplica as migrações sozinho ao iniciar
+> (`alembic upgrade head`).
+>
+> **Dados antigos:** o que estava em `patients_db.json` / `users_db.json`
+> **não aparece** até o B21 copiar esses arquivos para o banco. Eles continuam
+> no volume `backend_data`, intactos. Até lá, o admin inicial é recriado a
+> partir de `AUTH_BOOTSTRAP_*` no `API/.env`.
 
 ### Extensão Chrome
 
@@ -123,6 +127,17 @@ python server.py
 
 Servidor em `http://localhost:3001`.
 
+Para criar ou verificar o administrador inicial sem subir o servidor (com
+`AUTH_BOOTSTRAP_EMAIL` e `AUTH_BOOTSTRAP_PASSWORD` configurados), a partir da
+raiz do projeto:
+
+```bash
+python ./API/bootstrap_admin.py
+```
+
+O script aplica as migrações e não cria usuário duplicado se o administrador
+já existir.
+
 Sistema gerenciador web:
 
 ```bash
@@ -139,10 +154,35 @@ pendentes até o admin aprovar em **Médicos**.
 cd API && pip install -r requirements-dev.txt && pytest
 ```
 
-40 testes em 6 arquivos. As dependências pesadas (vosk, spaCy, numpy,
+As dependências pesadas (vosk, spaCy, numpy,
 speech_recognition) são substituídas por stubs no `tests/conftest.py`, então a
 suíte roda em segundos e **não** precisa dos modelos Vosk — é o que permite
 rodá-la no CI.
+
+Os testes de migração (`tests/test_migracoes.py`) rodam sempre em SQLite e,
+se `TEST_POSTGRES_URL` estiver definida, também em PostgreSQL — o CI sobe um
+Postgres 16 para isso. Localmente, use um banco **separado** (o teste desfaz a
+migração no fim e apagaria as tabelas do banco de desenvolvimento):
+
+```bash
+docker compose exec db createdb -U copmed copmed_test
+TEST_POSTGRES_URL=postgresql+psycopg://copmed:<senha>@localhost:5432/copmed_test pytest tests/test_migracoes.py
+```
+
+A suíte inteira (rotas e repositórios) roda em SQLite por padrão. Para rodá-la
+no PostgreSQL, aponte `TEST_DATABASE_URL` para outro banco separado (as
+tabelas são apagadas antes e depois de cada teste):
+
+```bash
+docker compose exec db createdb -U copmed copmed_suite
+TEST_DATABASE_URL=postgresql+psycopg://copmed:<senha>@localhost:5432/copmed_suite pytest
+```
+
+Ao mudar um modelo em `API/models/`, gere a migração e confira:
+
+```bash
+cd API && alembic revision --autogenerate -m "descricao" && alembic check
+```
 
 **Conhecido e quebrado nesta versão:** a extração do Amplimed usa dois conjuntos
 de seletores divergentes (D‑01); a diarização está em modo de teste (D‑03);
