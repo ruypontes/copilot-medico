@@ -10,10 +10,11 @@ import importlib
 import pytest
 
 from backend import auth_decorators
-from backend import patient_db as pdb
+from ids import DOCTOR_A, DOCTOR_B
+from repositories import ConsultaRepository, PacienteRepository, sessao
 
 
-def _fake_login_as(monkeypatch, profile="medico", user_id="doctor-a"):
+def _fake_login_as(monkeypatch, profile="medico", user_id=DOCTOR_A):
     """Finge um usuario logado com o perfil e o ID pedidos (sem token real)."""
 
     def fake_get_user_from_token(token):
@@ -35,22 +36,21 @@ def _fake_login_as(monkeypatch, profile="medico", user_id="doctor-a"):
 @pytest.fixture()
 def medico(monkeypatch):
     """Cabecalhos de um medico (doctor-a) logado."""
-    return _fake_login_as(monkeypatch, profile="medico", user_id="doctor-a")
+    return _fake_login_as(monkeypatch, profile="medico", user_id=DOCTOR_A)
 
 
 @pytest.fixture()
 def paciente(client):
     """Paciente do doctor-a com uma consulta. Depende de 'client' para o banco temporario."""
-    pid = pdb.generate_patient_id()
-    pdb.ensure_patient_exists(pid, name="Paciente Teste", doctor_id="doctor-a")
-    cid = pdb.add_consultation_to_patient(pid, "Consulta Teste")
+    pid = PacienteRepository(sessao.obter_sessao()).criar(nome="Paciente Teste", medico_id=DOCTOR_A)["id"]
+    cid = ConsultaRepository(sessao.obter_sessao()).criar(pid, "Consulta Teste")
     return pid, cid
 
 
 @pytest.fixture()
 def outro_medico(monkeypatch):
     """Cabecalhos de um medico diferente (doctor-b), sem acesso ao paciente do doctor-a."""
-    return _fake_login_as(monkeypatch, profile="medico", user_id="doctor-b")
+    return _fake_login_as(monkeypatch, profile="medico", user_id=DOCTOR_B)
 
 
 def _perfil_errado(monkeypatch):
@@ -90,7 +90,7 @@ def test_create_patient_success(client, medico):
     assert resp.status_code == 201
     body = resp.get_json()
     assert body["patient_name"] == "Ana"
-    assert body["doctor_id"] == "doctor-a"
+    assert body["doctor_id"] == DOCTOR_A
 
 
 def test_create_patient_invalid_body_400(client, medico):

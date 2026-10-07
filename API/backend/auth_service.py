@@ -2,7 +2,6 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -10,6 +9,8 @@ from functools import lru_cache
 from typing import Any
 
 from werkzeug.security import check_password_hash, generate_password_hash
+
+from repositories import MedicoRepository, sessao
 
 from .config import settings
 
@@ -19,7 +20,6 @@ except ImportError:  # pragma: no cover - optional dependency
     pyjwt = None
 
 
-USERS_DB_FILE = settings.auth_users_db_file
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 PROFILE_ALIASES = {
@@ -177,32 +177,14 @@ def normalize_profiles(profiles: list[str] | str | None) -> list[str]:
     return normalized
 
 
-def load_users_database() -> dict[str, Any]:
-    bootstrap_users_if_needed()
-    if not os.path.exists(USERS_DB_FILE):
-        return {"users": []}
-    try:
-        with open(USERS_DB_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (IOError, json.JSONDecodeError):
-        print(f"[AUTH] Nao foi possivel carregar {USERS_DB_FILE}. Usando base vazia.")
-        return {"users": []}
-
-    if not isinstance(data, dict) or not isinstance(data.get("users"), list):
-        return {"users": []}
-    return data
-
-
-def save_users_database(data: dict[str, Any]) -> None:
-    directory = os.path.dirname(USERS_DB_FILE)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    with open(USERS_DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def _medicos() -> MedicoRepository:
+    # Usuarios ficam na tabela `medico` (B20); o users_db.json so e lido pelo
+    # script de migracao do B21.
+    return MedicoRepository(sessao.obter_sessao())
 
 
 def bootstrap_users_if_needed() -> None:
-    if os.path.exists(USERS_DB_FILE):
+    if _medicos().contar() > 0:
         return
 
     email = normalize_email(settings.auth_bootstrap_email)
@@ -236,17 +218,7 @@ def create_user(
     if not normalized_profiles:
         raise ValueError("Perfil invalido")
 
-    data = {"users": []}
-    if os.path.exists(USERS_DB_FILE):
-        try:
-            with open(USERS_DB_FILE, "r", encoding="utf-8") as f:
-                loaded = json.load(f)
-                if isinstance(loaded, dict) and isinstance(loaded.get("users"), list):
-                    data = loaded
-        except (IOError, json.JSONDecodeError):
-            data = {"users": []}
-
-    if any(normalize_email(user.get("email")) == email for user in data["users"]):
+    if _medicos().obter_por_email(email) is not None:
         raise ValueError("Usuario ja existe")
 
     user = {
@@ -260,9 +232,7 @@ def create_user(
     }
     if extra_fields:
         user.update(extra_fields)
-    data["users"].append(user)
-    save_users_database(data)
-    return user
+    return _medicos().criar(user)
 
 
 def create_doctor_registration(
@@ -302,18 +272,13 @@ def create_doctor_registration(
 
 
 def find_user_by_email(email: str) -> dict[str, Any] | None:
-    email = normalize_email(email)
-    for user in load_users_database().get("users", []):
-        if normalize_email(user.get("email")) == email:
-            return user
-    return None
+    bootstrap_users_if_needed()
+    return _medicos().obter_por_email(normalize_email(email))
 
 
 def find_user_by_id(user_id: str) -> dict[str, Any] | None:
-    for user in load_users_database().get("users", []):
-        if user.get("id") == user_id:
-            return user
-    return None
+    bootstrap_users_if_needed()
+    return _medicos().obter(user_id)
 
 
 def sanitize_user(user: dict[str, Any]) -> dict[str, Any]:
@@ -400,8 +365,9 @@ def validate_user_profile_access(user: dict[str, Any], profile: str) -> None:
 
 def list_doctor_requests(status: str = "pending") -> list[dict[str, Any]]:
     normalized_status = status if status in {"pending", "approved", "rejected", "all"} else "pending"
+    bootstrap_users_if_needed()
     doctors = []
-    for user in load_users_database().get("users", []):
+    for user in _medicos().listar():
         if "medico" not in normalize_profiles(user.get("profiles")):
             continue
         approval_status = get_doctor_approval_status(user)
@@ -421,15 +387,13 @@ def list_doctor_requests(status: str = "pending") -> list[dict[str, Any]]:
 
 
 def _update_doctor_request(user_id: str, updater) -> dict[str, Any]:
-    data = load_users_database()
-    for user in data.get("users", []):
-        if user.get("id") == user_id:
-            if "medico" not in normalize_profiles(user.get("profiles")):
-                raise AuthError("Usuario nao e medico.", 400)
-            updater(user)
-            save_users_database(data)
-            return sanitize_doctor_request(user)
-    raise AuthError("Solicitacao de medico nao encontrada.", 404)
+    user = find_user_by_id(user_id)
+    if user is None:
+        raise AuthError("Solicitacao de medico nao encontrada.", 404)
+    if "medico" not in normalize_profiles(user.get("profiles")):
+        raise AuthError("Usuario nao e medico.", 400)
+    updater(user)
+    return sanitize_doctor_request(_medicos().atualizar(user))
 
 
 def approve_doctor_request(user_id: str, admin_id: str) -> dict[str, Any]:
