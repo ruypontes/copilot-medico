@@ -257,6 +257,7 @@ def test_extension_data_get_other_doctor_403(client, outro_medico, paciente):
 def test_extracted_data_success(client, medico, paciente, rota):
     resp = client.post(rota, json={
         "patient_id": paciente[0],
+        "consultation_id": paciente[1],
         "extracted_content": [{"role": "Anamnese", "text": "Dor de cabeca ha 3 dias"}],
     }, headers=medico)
     assert resp.status_code == 200
@@ -283,7 +284,7 @@ def test_extracted_data_wrong_profile_403(client, monkeypatch, rota):
 @pytest.mark.parametrize("rota", ["/api/extension/extracted-data", "/api/extracted-data"])
 def test_extracted_data_other_doctor_403(client, outro_medico, paciente, rota):
     resp = client.post(rota, json={
-        "patient_id": paciente[0], "extracted_content": "texto",
+        "patient_id": paciente[0], "consultation_id": paciente[1], "extracted_content": "texto",
     }, headers=outro_medico)
     assert resp.status_code == 403
 

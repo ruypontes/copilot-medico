@@ -36,17 +36,20 @@ def transcricao_para_dicionario(t: Transcricao) -> dict:
 
 def dado_extensao_para_dicionario(d: DadoExtensao) -> dict:
     criado_em = iso(d.criado_em)
-    return {
+    item = {
         "id": id_texto(d.id),
         "patient_id": id_texto(d.paciente_id),
         "consultation_id": id_texto(d.consulta_id),
         "source": "extension",
         "source_url": d.url_origem,
-        "type": "extracted_data",
+        "type": d.tipo or "extracted_data",
         "content": d.conteudo,
         "created_at": criado_em,
         "timestamp": criado_em,
     }
+    if d.pep_origem:
+        item["pep_origem"] = d.pep_origem
+    return item
 
 
 class _RegistroDoPaciente(Repositorio):
@@ -96,7 +99,7 @@ class TranscricaoRepository(_RegistroDoPaciente):
 
 class DadoExtensaoRepository(_RegistroDoPaciente):
     def adicionar(self, paciente_id, conteudo, consulta_id=None, url_origem=None,
-                  criado_em=None) -> dict | None:
+                  criado_em=None, tipo="extracted_data", pep_origem=None) -> dict | None:
         pid, cid = self._ids(paciente_id, consulta_id)
         if pid is None:
             return None
@@ -105,6 +108,8 @@ class DadoExtensaoRepository(_RegistroDoPaciente):
             consulta_id=cid,
             url_origem=url_origem,
             conteudo=conteudo,
+            tipo=tipo,
+            pep_origem=pep_origem,
             criado_em=parse_data(criado_em) or datetime.now(timezone.utc),
         )
         self.sessao.add(dado)

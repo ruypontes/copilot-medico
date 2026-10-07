@@ -15,7 +15,6 @@ Migrado de unittest para pytest. Tres problemas da versao anterior:
 """
 from unittest.mock import patch
 
-import pytest
 
 
 # ---------------------------------------------------------------------------

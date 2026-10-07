@@ -1,7 +1,4 @@
-import sys
 import os
-import json
-import uuid
 from datetime import datetime
 
 from flask import Flask, g, request, jsonify
@@ -12,8 +9,11 @@ import speech_recognition as sr
 # Assuming these imports are correct and available
 from backend import gemini_connection
 from backend import pdf_reader
+from backend import pep_import
 from backend.anonimizacao import anonimizar
 from backend.anonimizacao import servico as anonimizacao_servico
+from backend.openapi import build_openapi_spec
+from backend.pep_import import PepImportError
 from backend.auth_decorators import roles_required, token_required
 from backend.auth_service import (
     AuthError,
@@ -136,7 +136,7 @@ try:
     MODEL_PATH = os.path.join(BASE_DIR, "backend", "vosk-model-small-pt-0.3")
     SPK_MODEL_PATH = os.path.join(BASE_DIR, "backend", "vosk-model-spk-0.4")
 
-    print(f"[SERVER] Carregando Modelos de IA...")
+    print("[SERVER] Carregando Modelos de IA...")
 
     # Inicializa a classe Diarizador (Vosk + Google)
     if os.path.exists(MODEL_PATH) and os.path.exists(SPK_MODEL_PATH):
@@ -519,7 +519,7 @@ def transcribe_audio_route():
 
         if audio_processor:
             try:
-                print(f"[TRANSCRIÇÃO] Iniciando Diarização (Vosk + Google)...")
+                print("[TRANSCRIÇÃO] Iniciando Diarização (Vosk + Google)...")
                 # Aqui chamamos sua classe Diarizador
                 result = audio_processor.processar_audio(tmp_path)
 
@@ -539,7 +539,7 @@ def transcribe_audio_route():
 
         # 4. Fallback (Transcrição Simples) se o Diarizador falhar ou não existir
         if not processed_successfully:
-            print(f"[TRANSCRIÇÃO] Usando Transcritor Simples (Legacy)...")
+            print("[TRANSCRIÇÃO] Usando Transcritor Simples (Legacy)...")
             try:
                 transcritor = TranscritorVoz(idioma="pt-BR")
                 with sr.AudioFile(tmp_path) as source:
@@ -758,31 +758,41 @@ def handle_chat_message():
         return jsonify({"status": "error", "message": f"Erro interno do servidor: {e}"}), 500
 
 
-def _handle_extension_extracted_data_request():
-    try:
-        data = request.get_json(silent=True)
-        if not isinstance(data, dict):
-            return _json_error("Corpo JSON invalido.", 400)
+def _register_pep_import(patient_id, consultation_id, data, require_typed=False):
+    """Nucleo compartilhado das rotas de importacao do PEP (B07).
 
-        patient_id = _payload_value(data, "patient_id", "patientId")
-        consultation_id = _payload_value(data, "consultation_id", "consultationId")
+    Aceita o corpo tipado (`pep_origem` + `campos`) ou, nas rotas legadas, o formato
+    livre (`extracted_content` / `extracted_data`). Em ambos a consulta e obrigatoria.
+    """
+    try:
         source_url = _payload_value(data, "source_url", "sourceUrl")
         created_at = _payload_value(data, "created_at", "createdAt")
-        raw_content = _payload_value(data, "extracted_content", "extractedData", "extracted_data")
 
         if not isinstance(patient_id, str) or not patient_id.strip():
             return _json_error("patient_id e obrigatorio.", 400)
+        if not isinstance(consultation_id, str) or not consultation_id.strip():
+            return _json_error("consultation_id e obrigatorio.", 400)
         if source_url is not None and not isinstance(source_url, str):
             return _json_error("source_url deve ser texto.", 400)
         if created_at is not None and not isinstance(created_at, str):
             return _json_error("created_at deve ser texto.", 400)
 
-        extracted_content, content_error = _normalize_extension_content(raw_content)
-        if content_error:
-            return _json_error(content_error, 400)
+        typed = require_typed or "campos" in data
+        normalized = None
+        if typed:
+            try:
+                normalized = pep_import.parse_pep_import(data)
+            except PepImportError as exc:
+                return _json_error(str(exc), 400)
+            extracted_content = normalized["campos"]
+        else:
+            raw_content = _payload_value(data, "extracted_content", "extractedData", "extracted_data")
+            extracted_content, content_error = _normalize_extension_content(raw_content)
+            if content_error:
+                return _json_error(content_error, 400)
 
         patient_id = patient_id.strip()
-        consultation_id = _optional_text(consultation_id)
+        consultation_id = consultation_id.strip()
         source_url = _optional_text(source_url)
         created_at = _optional_text(created_at)
 
@@ -790,7 +800,7 @@ def _handle_extension_extracted_data_request():
         if access_error:
             return access_error
 
-        if consultation_id and not _consultas().pertence_ao_paciente(patient_id, consultation_id):
+        if not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return _json_error("Consulta nao encontrada.", 404)
 
         extension_entry = _dados_extensao().adicionar(
@@ -799,39 +809,74 @@ def _handle_extension_extracted_data_request():
             consulta_id=consultation_id,
             url_origem=source_url,
             criado_em=created_at,
+            tipo="pep_import" if typed else "extracted_data",
+            pep_origem=normalized["pep_origem"] if typed else None,
         )
         if not extension_entry:
             return _json_error("Falha ao salvar dados da extensao.", 500)
 
-        ai_response_text = None
-        if consultation_id:
+        if typed:
+            formatted_text = pep_import.format_for_prompt(normalized, source_url)
+        else:
             formatted_text = _format_extension_extracted_data(extracted_content, source_url)
-            # Dado raspado do prontuario e o caminho mais provavel de PII
-            # entrar no sistema: anonimiza antes de persistir ou enviar.
-            texto_anonimo, mapa = _anonimizar_para_envio(
-                formatted_text, patient_id, consultation_id
-            )
+        # Dado raspado do prontuario e o caminho mais provavel de PII
+        # entrar no sistema: anonimiza antes de persistir ou enviar.
+        texto_anonimo, mapa = _anonimizar_para_envio(
+            formatted_text, patient_id, consultation_id
+        )
 
-            _mensagens().adicionar(consultation_id, "user", texto_anonimo)
-            ai_response_text = gemini_connection.send_message(
-                patient_id, consultation_id, texto_anonimo
-            )
-            _mensagens().adicionar(consultation_id, "model", ai_response_text)
-            # Reidrata so o que volta para a tela do medico.
-            ai_response_text = mapa.reidratar(ai_response_text)
+        _mensagens().adicionar(consultation_id, "user", texto_anonimo)
+        ai_response_text = gemini_connection.send_message(
+            patient_id, consultation_id, texto_anonimo
+        )
+        _mensagens().adicionar(consultation_id, "model", ai_response_text)
+        # Reidrata so o que volta para a tela do medico.
+        ai_response_text = mapa.reidratar(ai_response_text)
 
-        return jsonify({
+        response = {
             "status": "success",
             "ai_response": ai_response_text,
             "patient_id": patient_id,
             "consultation_id": consultation_id,
-            "extension_data": extension_entry
-        }), 200
+            "extension_data": extension_entry,
+        }
+        if typed:
+            response["resumo"] = pep_import.summarize(normalized)
+        return jsonify(response), 200
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Erro interno ao processar dados da extensao: {e}"}), 500
+
+
+def _handle_extension_extracted_data_request():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+
+    patient_id = _payload_value(data, "patient_id", "patientId")
+    consultation_id = _payload_value(data, "consultation_id", "consultationId")
+    return _register_pep_import(patient_id, consultation_id, data)
+
+
+@app.route('/api/consultations/<consultation_id>/pep-import', methods=['POST'])
+@roles_required("administrador", "medico")
+def handle_pep_import(consultation_id):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+
+    patient_id = _consultas().paciente_da_consulta(consultation_id)
+    if not patient_id:
+        return _json_error("Consulta nao encontrada.", 404)
+
+    return _register_pep_import(patient_id, consultation_id, data, require_typed=True)
+
+
+@app.route('/api/openapi.json', methods=['GET'])
+def openapi_spec():
+    return jsonify(build_openapi_spec())
 
 
 @app.route('/api/extension/extracted-data', methods=['POST'])

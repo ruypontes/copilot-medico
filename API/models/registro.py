@@ -47,3 +47,9 @@ class DadoExtensao(UuidPkMixin, CriadoEmMixin, Base):
     url_origem: Mapped[str | None] = mapped_column(Text)
     # Lista de {role, text}, objeto chave->valor ou texto, como a API aceita hoje.
     conteudo: Mapped[list | dict | str] = mapped_column(JSON, nullable=False)
+    # B07: "extracted_data" (formato livre legado) ou "pep_import" (contrato
+    # tipado), e o PEP de onde os campos vieram ("amplimed", "esus-pec", "outro").
+    tipo: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="extracted_data", server_default="extracted_data"
+    )
+    pep_origem: Mapped[str | None] = mapped_column(String(20))

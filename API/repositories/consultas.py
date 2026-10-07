@@ -106,6 +106,12 @@ class ConsultaRepository(Repositorio):
         consulta = self.sessao.get(Consulta, cid)
         return consulta is not None and consulta.paciente_id == pid
 
+    def paciente_da_consulta(self, consulta_id) -> str | None:
+        """Id do paciente dono da consulta (B07: a rota pep-import so recebe a consulta)."""
+        cid = parse_uuid(consulta_id)
+        consulta = self.sessao.get(Consulta, cid) if cid is not None else None
+        return id_texto(consulta.paciente_id) if consulta is not None else None
+
     def listar(self, paciente_id) -> list[dict]:
         """Mais antiga primeiro (o chat e o upload de PDF usam a primeira)."""
         pid = parse_uuid(paciente_id)

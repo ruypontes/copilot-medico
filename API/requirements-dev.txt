@@ -12,3 +12,7 @@ pytest-cov==5.0.0
 # Driver do PostgreSQL para tests/test_migracoes.py (B19). O wheel binario
 # nao compila nada, entao nao pesa no CI.
 psycopg[binary]>=3.1,<4
+
+# B10: lint e testes de contrato da API (OpenAPI x rotas Flask, B07)
+ruff==0.16.10
+jsonschema==4.26.0

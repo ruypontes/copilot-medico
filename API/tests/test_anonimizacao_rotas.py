@@ -13,7 +13,6 @@ import re
 
 import pytest
 
-from conftest import TEST_USER_ID
 
 # PII plantada nas requisicoes. Nenhuma pode aparecer no que vai ao provedor.
 NOME = "Maria Souza"
@@ -44,7 +43,7 @@ def payloads_capturados(monkeypatch):
     def falso_send_message(patient_id, consultation_id, message_text):
         enviados.append(message_text)
         # Devolve tokens para exercitar a reidratacao na volta.
-        return f"Analise de [PACIENTE_1]: confira o CPF [CPF_1]."
+        return "Analise de [PACIENTE_1]: confira o CPF [CPF_1]."
 
     monkeypatch.setattr(server.gemini_connection, "send_message", falso_send_message)
     return enviados
