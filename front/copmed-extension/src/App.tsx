@@ -4,6 +4,8 @@ import {
   clearSession,
   getAuthenticatedUser,
   getStoredSession,
+  publishApiUrl,
+  setSessionExpiredHandler,
   storeSession,
   type ExtensionSession,
 } from "./services/api";
@@ -16,6 +18,17 @@ function App() {
   const [session, setSession] = useState<ExtensionSession | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [authError, setAuthError] = useState("");
+
+  // B27: o apiRequest trata 401 de forma central (renova ou limpa a sessao) e avisa aqui,
+  // para a tela voltar ao login de qualquer ponto do app.
+  useEffect(() => {
+    publishApiUrl(); // o background.js usa o mesmo API_URL
+    setSessionExpiredHandler(() => {
+      setSession(null);
+      setAuthError("Sessão expirada. Entre novamente.");
+    });
+    return () => setSessionExpiredHandler(null);
+  }, []);
 
   useEffect(() => {
     let ignore = false;
