@@ -10,7 +10,7 @@ import speech_recognition as sr
 from backend import gemini_connection
 from backend import pdf_reader
 from backend import pep_import
-from backend.anonimizacao import anonimizar
+from backend.anonimizacao import MapaAnonimizacao, anonimizar, anonimizar_estrutura
 from backend.anonimizacao import servico as anonimizacao_servico
 from backend.openapi import build_openapi_spec
 from backend.pep_import import PepImportError
@@ -122,6 +122,40 @@ def _anonimizar_para_envio(texto, patient_id=None, consultation_id=None):
     if consultation_id:
         _mapas_anonimizacao().salvar(consultation_id, resultado.mapa, cofre)
     return resultado.texto, resultado.mapa
+
+
+def _anonimizar_conteudo_extensao(conteudo, patient_id=None, consultation_id=None):
+    """Anonimiza a estrutura raspada do prontuario antes de PERSISTI-LA (B69).
+
+    `_anonimizar_para_envio` cobre o texto que sai para o LLM; este cobre o
+    que fica no banco. Sao caminhos diferentes do mesmo dado: a estrutura vai
+    para `dado_extensao.conteudo` e o texto formatado vai para `mensagem`.
+
+    O mapa da consulta e carregado uma vez e reaproveitado em todos os campos,
+    para que o mesmo CPF receba o mesmo token em toda a estrutura - e o mesmo
+    token que a mensagem enviada ao modelo vai usar.
+    """
+    cofre = _cofre_atual()
+    # Um unico mapa para TODOS os campos. Sem consulta ele comeca vazio em vez
+    # de None: passar None faria `anonimizar` criar um mapa novo por campo, e
+    # o mesmo CPF receberia tokens diferentes dentro da mesma estrutura.
+    mapa = (
+        _mapas_anonimizacao().carregar(consultation_id, cofre)
+        if consultation_id
+        else MapaAnonimizacao()
+    )
+    paciente = _pacientes().obter(patient_id) if patient_id else None
+    nomes = anonimizacao_servico.nomes_do_cadastro(paciente)
+
+    def _anonimizar_campo(texto):
+        resultado = anonimizar(texto, mapa, nomes_conhecidos=nomes)
+        return resultado.texto, resultado.mapa
+
+    conteudo_anonimo, mapa_final = anonimizar_estrutura(conteudo, _anonimizar_campo)
+
+    if consultation_id and mapa_final is not None:
+        _mapas_anonimizacao().salvar(consultation_id, mapa_final, cofre)
+    return conteudo_anonimo
 
 
 def _dados_extensao():
@@ -282,6 +316,8 @@ def _format_extension_extracted_data(extracted_content, source_url=None):
         lines.append(str(extracted_content))
 
     return "\n".join(lines)
+
+
 
 
 @app.route('/api/health', methods=['GET'])
@@ -803,9 +839,18 @@ def _register_pep_import(patient_id, consultation_id, data, require_typed=False)
         if not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return _json_error("Consulta nao encontrada.", 404)
 
+        # B69: a estrutura crua tambem e persistida, entao anonimizar apenas o
+        # texto que vai ao LLM deixava nome e CPF em claro em `dado_extensao`.
+        # O conteudo passa pelo anonimizador ANTES de ser gravado, usando o
+        # mapa da consulta - assim o token de um CPF e o mesmo aqui e na
+        # mensagem enviada ao modelo.
+        conteudo_anonimo = _anonimizar_conteudo_extensao(
+            extracted_content, patient_id, consultation_id
+        )
+
         extension_entry = _dados_extensao().adicionar(
             patient_id,
-            extracted_content,
+            conteudo_anonimo,
             consulta_id=consultation_id,
             url_origem=source_url,
             criado_em=created_at,

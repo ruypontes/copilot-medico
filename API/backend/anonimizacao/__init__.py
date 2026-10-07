@@ -13,7 +13,12 @@ Uso tipico no fluxo de uma mensagem:
 """
 from typing import Any, Sequence
 
-from .nucleo import MapaAnonimizacao, Resultado, anonimizar_regex
+from .nucleo import (
+    MapaAnonimizacao,
+    Resultado,
+    anonimizar_estrutura,
+    anonimizar_regex,
+)
 from .ner import (
     EXCECOES_MEDICAS,
     TIPO_LOCAL,
@@ -70,6 +75,7 @@ __all__ = [
     "TIPO_RG",
     "TIPO_TELEFONE",
     "anonimizar",
+    "anonimizar_estrutura",
     "anonimizar_ner",
     "anonimizar_regex",
     "carregar_nlp",

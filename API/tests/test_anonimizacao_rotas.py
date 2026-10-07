@@ -9,6 +9,7 @@ tres rotas.
 from __future__ import annotations
 
 import io
+import json
 import re
 
 import pytest
@@ -212,3 +213,62 @@ def test_logout_descarta_a_chave_da_sessao(auth_client):
 
     assert resposta.status_code == 200
     assert cofres.obter("test-valid-token") is None
+
+
+# ---------------------------------------------------------------------------
+# B69: a ESTRUTURA persistida tambem nao pode conter PII
+# ---------------------------------------------------------------------------
+
+def test_conteudo_da_extensao_e_persistido_anonimizado(
+    auth_client, paciente, payloads_capturados
+):
+    """O B25/B26 anonimizava so o texto enviado ao LLM; a estrutura crua ia
+    para `dado_extensao.conteudo` com nome e CPF em claro. Esta e a lacuna
+    que o B69 fecha - e a razao de o merge ter mantido a ideia dele."""
+    auth_client.post("/api/extension/extracted-data", json={
+        "patient_id": paciente["patient_id"],
+        "consultation_id": paciente["first_consultation_id"],
+        "extracted_content": [
+            {"role": "nome", "text": NOME},
+            {"role": "cpf", "text": CPF},
+            {"role": "telefone", "text": TELEFONE},
+            {"role": "queixa", "text": "dor toracica ha 2 horas"},
+        ],
+    })
+
+    guardado = auth_client.get(
+        f"/api/patients/{paciente['patient_id']}/extension-data"
+    ).get_json()
+
+    bruto = json.dumps(guardado, ensure_ascii=False)
+
+    for valor in [NOME, CPF, TELEFONE]:
+        assert valor not in bruto, f"{valor!r} foi persistido em claro"
+    for rotulo, padrao in PADROES_PROIBIDOS.items():
+        achado = padrao.search(bruto)
+        assert achado is None, f"padrao de {rotulo} persistido: {achado.group(0)!r}"
+
+    # Os rotulos de campo e o conteudo clinico sobrevivem.
+    assert "queixa" in bruto
+    assert "dor toracica" in bruto
+
+
+def test_token_persistido_e_o_mesmo_enviado_ao_provedor(
+    auth_client, paciente, payloads_capturados
+):
+    """Estrutura e mensagem compartilham o mapa da consulta: o CPF tem de
+    receber o MESMO token nos dois caminhos, senao a reidratacao de um
+    corromperia o outro."""
+    auth_client.post("/api/extension/extracted-data", json={
+        "patient_id": paciente["patient_id"],
+        "consultation_id": paciente["first_consultation_id"],
+        "extracted_content": [{"role": "cpf", "text": CPF}],
+    })
+
+    persistido = json.dumps(auth_client.get(
+        f"/api/patients/{paciente['patient_id']}/extension-data"
+    ).get_json())
+
+    token_no_payload = re.search(r"\[CPF_\d+\]", payloads_capturados[0]).group(0)
+
+    assert token_no_payload in persistido

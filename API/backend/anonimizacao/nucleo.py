@@ -160,3 +160,50 @@ def anonimizar_regex(
     partes.append(texto[cursor:])
 
     return Resultado(texto="".join(partes), mapa=mapa)
+
+
+def anonimizar_estrutura(
+    conteudo,
+    anonimizar_texto,
+) -> tuple[object, MapaAnonimizacao | None]:
+    """Aplica `anonimizar_texto` a cada string de uma estrutura (B69).
+
+    O conteudo raspado do prontuario chega em tres formatos (os mesmos que
+    `_normalize_extension_content` aceita):
+
+        [{"role": ..., "text": ...}, ...]   lista de campos
+        {"campo": "valor" | [...]}          dicionario
+        "texto corrido"
+
+    Anonimizar so o texto formatado que vai ao LLM nao basta: a estrutura
+    crua tambem e PERSISTIDA, e sem este passo o banco guardaria o nome e o
+    CPF em claro. Percorrer a estrutura (em vez de serializar e anonimizar o
+    JSON inteiro) preserva as chaves - sao rotulos de campo, nao dado do
+    paciente - e evita que o anonimizador tropece na pontuacao do JSON.
+
+    `anonimizar_texto` recebe uma string e devolve (texto, mapa); o mapa e
+    compartilhado entre as chamadas, entao o mesmo CPF recebe o mesmo token
+    em todos os campos.
+    """
+    ultimo_mapa: MapaAnonimizacao | None = None
+
+    def _texto(valor):
+        nonlocal ultimo_mapa
+        if not isinstance(valor, str) or not valor.strip():
+            return valor
+        anonimo, mapa = anonimizar_texto(valor)
+        ultimo_mapa = mapa
+        return anonimo
+
+    def _valor(valor):
+        if isinstance(valor, str):
+            return _texto(valor)
+        if isinstance(valor, list):
+            return [_valor(item) for item in valor]
+        if isinstance(valor, dict):
+            # Chaves sao rotulos de campo ("peso", "anamnese"), nao PII.
+            return {chave: _valor(sub) for chave, sub in valor.items()}
+        # Numeros, booleanos e None passam intactos.
+        return valor
+
+    return _valor(conteudo), ultimo_mapa
