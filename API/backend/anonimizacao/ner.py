@@ -22,10 +22,19 @@ import re
 import unicodedata
 from typing import Any, Callable, Iterable, Sequence
 
-from .nucleo import MapaAnonimizacao, Resultado
+from .nucleo import MapaAnonimizacao, Resultado, _REGEX_TOKEN
 
 TIPO_PESSOA = "PACIENTE"
 TIPO_LOCAL = "LOCAL"
+
+ROTULOS_ESTRUTURAIS = frozenset({
+    "fonte",
+    "sinais vitais",
+    "peso",
+    "altura",
+    "anamnese",
+    "notas clinicas",
+})
 
 # Rotulos do spaCy que nos interessam.
 _ROTULOS = {"PER": TIPO_PESSOA, "PerSON": TIPO_PESSOA, "PERSON": TIPO_PESSOA, "LOC": TIPO_LOCAL}
@@ -134,23 +143,53 @@ def _ocorrencias_do_cadastro(
 
 def _ocorrencias_do_ner(texto: str, nlp: Any) -> list[tuple[int, int, str, str]]:
     achados: list[tuple[int, int, str, str]] = []
+
+    # Tokens criados pela camada de regex (CPF, telefone, data etc.)
+    # ja estao protegidos e nao podem ser reinterpretados pelo NER.
+    tokens_protegidos = [
+        casamento.span()
+        for casamento in _REGEX_TOKEN.finditer(texto)
+    ]
+
     documento = nlp(texto)
+
     for entidade in getattr(documento, "ents", []):
         tipo = _ROTULOS.get(getattr(entidade, "label_", ""))
         if tipo is None:
             continue
+
         trecho = entidade.text
+
+        # Rotulos de campos da estrutura clinica nao sao PII.
+        # O NER pode classifica-los incorretamente como LOC.
+        if _normalizar_nome(trecho) in ROTULOS_ESTRUTURAIS:
+            continue
+
         if e_excecao_medica(trecho):
             continue
+
         inicio = getattr(entidade, "start_char", None)
         fim = getattr(entidade, "end_char", None)
+
         if inicio is None or fim is None:
             # Stub de teste sem offsets: localiza pela primeira ocorrencia.
             posicao = texto.find(trecho)
             if posicao < 0:
                 continue
             inicio, fim = posicao, posicao + len(trecho)
+
+        # Se a entidade do NER estiver dentro de um token que ja foi
+        # produzido pelo regex, ignoramos a entidade.
+        # Exemplo: [TELEFONE_1] nao pode virar [[LOCAL_1]].
+        dentro_de_token = any(
+            inicio < token_fim and token_inicio < fim
+            for token_inicio, token_fim in tokens_protegidos
+        )
+        if dentro_de_token:
+            continue
+
         achados.append((inicio, fim, tipo, trecho))
+
     return achados
 
 

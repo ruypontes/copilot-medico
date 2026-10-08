@@ -201,8 +201,17 @@ def anonimizar_estrutura(
         if isinstance(valor, list):
             return [_valor(item) for item in valor]
         if isinstance(valor, dict):
-            # Chaves sao rotulos de campo ("peso", "anamnese"), nao PII.
-            return {chave: _valor(sub) for chave, sub in valor.items()}
+            # Chaves sao rotulos de campo, nao PII.
+            # Em estruturas vindas da extensao, "role" tambem e um
+            # rotulo estrutural ("anamnese", "cpf", "telefone", etc.).
+            # Somente os valores devem passar pelo anonimizador.
+            resultado = {}
+            for chave, sub in valor.items():
+                if chave == "role":
+                    resultado[chave] = sub
+                else:
+                    resultado[chave] = _valor(sub)
+            return resultado
         # Numeros, booleanos e None passam intactos.
         return valor
 
