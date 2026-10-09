@@ -3,6 +3,7 @@
 Importar este pacote registra todas as tabelas em `Base.metadata`, que e o
 que o Alembic usa para gerar e conferir as migracoes (ver migrations/).
 """
+from .auditoria import EnvioExterno
 from .base import Base
 from .consulta import (
     Consentimento,
@@ -24,6 +25,7 @@ __all__ = [
     "Consulta",
     "DadoExtensao",
     "DocumentoSoap",
+    "EnvioExterno",
     "MapaAnonimizacaoConsulta",
     "Medico",
     "Mensagem",

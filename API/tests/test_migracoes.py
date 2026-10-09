@@ -22,6 +22,8 @@ TABELAS = {
     "transcricao", "documento_soap", "consentimento", "dado_extensao",
     # B26: mapa token -> valor real por consulta, cifrado (US016-CA002).
     "mapa_anonimizacao",
+    # B36: auditoria de envios externos, so metadados (US016-CA004).
+    "envio_externo",
 }
 
 
