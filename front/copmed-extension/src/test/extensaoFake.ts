@@ -91,6 +91,15 @@ function api(method: string, path: string, body: Record<string, unknown>) {
         : [];
     return resposta(200, { status: "success", logs });
   }
+  if ((m = path.match(/^\/api\/consultations\/([^/]+)\/pep-import$/)) && method === "POST") {
+    const cid = decodeURIComponent(m[1]);
+    fake.historicos[cid] = [
+      ...(fake.historicos[cid] || []),
+      msg("user", "Dados do PEP importados."),
+      msg("model", "Dados analisados."),
+    ];
+    return resposta(200, { status: "success", consultation_id: cid });
+  }
   if (path === "/api/chat") {
     const cid = String(body.consultation_id);
     fake.historicos[cid] = [
@@ -143,6 +152,12 @@ export function instalarFakes() {
   });
   const chromeFake = {
     storage: { local: area(() => fake.store), session: area(() => fake.session) },
+    tabs: { query: vi.fn(async () => [{ id: 1 }]) },
+    scripting: {
+      executeScript: vi.fn(async (injection: { func: () => unknown }) => [
+        { result: injection.func() },
+      ]),
+    },
   };
   vi.stubGlobal("chrome", chromeFake);
 
