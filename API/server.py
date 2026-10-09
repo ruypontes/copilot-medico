@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-from flask import Flask, g, request, jsonify
+from flask import Flask, g, has_request_context, request, jsonify
 from flask_cors import CORS
 import tempfile
 import speech_recognition as sr
@@ -42,6 +42,7 @@ from backend.config import settings
 
 # Camada de dados (B20): um repositorio por entidade, no banco de DB_URL.
 from repositories import (
+    AuditoriaEnvioRepository,
     ConsultaRepository,
     DadoExtensaoRepository,
     MapaAnonimizacaoRepository,
@@ -50,6 +51,14 @@ from repositories import (
     PacienteRepository,
     TranscricaoRepository,
     sessao,
+)
+from repositories.auditoria import (
+    OPERACAO_CHAT,
+    OPERACAO_EXTENSAO,
+    OPERACAO_PDF,
+    OPERACAO_RECOMENDACAO,
+    OPERACAO_TRANSCRICAO,
+    PROVEDOR_GEMINI,
 )
 from backend.processador_voz.processador_voz import TranscritorVoz
 from backend.audio_service import Diarizador
@@ -94,6 +103,87 @@ def _transcricoes():
 
 def _mapas_anonimizacao():
     return MapaAnonimizacaoRepository(sessao.obter_sessao())
+
+
+def _auditoria():
+    return AuditoriaEnvioRepository(sessao.obter_sessao())
+
+
+def _tamanho_texto(valor) -> int:
+    return len(valor.encode("utf-8")) if isinstance(valor, str) else 0
+
+
+def _registrar_envio_externo(provedor, operacao, tamanho_bytes, consultation_id=None, chamadas=1):
+    """Grava na auditoria que algo saiu para um provedor externo (B36 / US016-CA004).
+
+    So metadados: quando (criado_em), qual consulta, qual provedor e quanto. O
+    conteudo nunca passa por aqui.
+
+    Falha de auditoria NAO bloqueia o envio: uma indisponibilidade do banco nao
+    pode impedir o atendimento. O erro e logado (so o tipo, nunca conteudo) e a
+    sessao e desfeita para continuar utilizavel. Se a politica do projeto for
+    "sem auditoria, sem envio", e aqui que se troca por um `raise`.
+    """
+    try:
+        medico_id = (getattr(g, "current_user", None) or {}).get("id") if has_request_context() else None
+        _auditoria().registrar(
+            provedor, operacao, tamanho_bytes,
+            consulta_id=consultation_id, medico_id=medico_id, chamadas=chamadas,
+        )
+    except Exception as erro:
+        try:
+            sessao.obter_sessao().rollback()
+        except Exception:
+            pass
+        print(f"[AUDITORIA] Falha ao registrar envio externo ({provedor}/{operacao}): {type(erro).__name__}")
+
+
+def _enviar_ao_gemini(operacao, patient_id, consultation_id, texto):
+    """UNICO caminho do backend ate o Gemini (B36 / US016-CA004).
+
+    Registra o envio e so entao chama o provedor. Toda rota que fale com o LLM
+    passa por aqui; `tests/test_b36_auditoria.py` falha se surgir uma chamada
+    direta a `gemini_connection.send_message` fora desta funcao.
+
+    O tamanho inclui o historico da consulta: o Gemini e sem estado e
+    `send_message` reenvia o historico inteiro a cada chamada.
+    """
+    historico = _mensagens().historico(consultation_id) if consultation_id else []
+    tamanho = _tamanho_texto(texto) + sum(
+        _tamanho_texto(parte.get("text"))
+        for mensagem in historico or []
+        for parte in mensagem.get("parts", [])
+        if isinstance(parte, dict)
+    )
+    _registrar_envio_externo(PROVEDOR_GEMINI, operacao, tamanho, consultation_id)
+    return gemini_connection.send_message(patient_id, consultation_id, texto)
+
+
+def _registrar_envio_audio(provedor, tamanho_bytes):
+    """Gancho do TranscritorVoz: soma cada trecho de audio enviado ao Google.
+
+    A diarizacao manda um trecho por vez; somar e gravar UMA linha no fim da
+    requisicao (`_descarregar_envios_audio`) evita dezenas de linhas por
+    gravacao sem perder o total nem a contagem de chamadas.
+    """
+    if not has_request_context():
+        return
+    acumulado = g.setdefault("_envios_audio", {"provedor": provedor, "bytes": 0, "chamadas": 0})
+    acumulado["bytes"] += int(tamanho_bytes)
+    acumulado["chamadas"] += 1
+
+
+def _descarregar_envios_audio(consultation_id=None):
+    acumulado = g.pop("_envios_audio", None) if has_request_context() else None
+    if acumulado and acumulado["chamadas"]:
+        _registrar_envio_externo(
+            acumulado["provedor"], OPERACAO_TRANSCRICAO, acumulado["bytes"],
+            consultation_id, chamadas=acumulado["chamadas"],
+        )
+
+
+# Todo envio de audio ao Google (diarizacao e fallback) passa pelo TranscritorVoz.
+TranscritorVoz.auditor = _registrar_envio_audio
 
 
 def _token_da_requisicao():
@@ -163,6 +253,74 @@ def _anonimizar_conteudo_extensao(conteudo, patient_id=None, consultation_id=Non
     if consultation_id and mapa_final is not None:
         _mapas_anonimizacao().salvar(consultation_id, mapa_final, cofre)
     return conteudo_anonimo
+
+
+def _anonimizar_transcricao(texto, turnos, patient_id=None, consultation_id=None):
+    """Anonimiza a transcricao ANTES de grava-la (B36 / US016-CA001).
+
+    A fala do paciente e da consulta passa pelo Google SR e voltava ao banco com
+    o que foi dito - nome, CPF, telefone - em `transcricao.texto` e em cada turno.
+    Aqui o texto corrido e o `text` de cada turno passam pelo anonimizador,
+    com UM mapa para tudo: a mesma pessoa recebe o mesmo token no texto, nos
+    turnos e nas mensagens de chat da consulta.
+
+    Nao usa `anonimizar_estrutura`: ele mascara TODA string, e `role`
+    ("Medico"/"Paciente") e `role_key` sao rotulos do turno, nao dado do paciente.
+    Devolve (texto, turnos, mapa); o mapa serve para reidratar o que volta a tela.
+    """
+    cofre = _cofre_atual()
+    mapa = (
+        _mapas_anonimizacao().carregar(consultation_id, cofre)
+        if consultation_id
+        else MapaAnonimizacao()
+    )
+    paciente = _pacientes().obter(patient_id) if patient_id else None
+    nomes = anonimizacao_servico.nomes_do_cadastro(paciente)
+
+    def _anonimizar_campo(valor):
+        if not isinstance(valor, str) or not valor.strip():
+            return valor
+        return anonimizar(valor, mapa, nomes_conhecidos=nomes).texto
+
+    texto_anonimo = _anonimizar_campo(texto)
+    turnos_anonimos = None
+    if turnos:
+        turnos_anonimos = [
+            {**turno, "text": _anonimizar_campo(turno.get("text"))} if isinstance(turno, dict) else turno
+            for turno in turnos
+        ]
+
+    if consultation_id:
+        _mapas_anonimizacao().salvar(consultation_id, mapa, cofre)
+    return texto_anonimo, turnos_anonimos, mapa
+
+
+def _reidratar_transcricao(registro, mapa):
+    """Volta os tokens ao valor real so no que e devolvido ao medico (US016-CA002).
+
+    O banco continua com os tokens. Segue o padrao do chat: so a resposta
+    imediata e reidratada; as listagens de historico devolvem o que esta gravado.
+    """
+    if not isinstance(registro, dict) or mapa is None:
+        return registro
+    reidratado = dict(registro)
+    if isinstance(reidratado.get("text"), str):
+        reidratado["text"] = mapa.reidratar(reidratado["text"])
+    if isinstance(reidratado.get("dialogue"), list):
+        reidratado["dialogue"] = [
+            {**turno, "text": mapa.reidratar(turno["text"])}
+            if isinstance(turno, dict) and isinstance(turno.get("text"), str)
+            else turno
+            for turno in reidratado["dialogue"]
+        ]
+    return reidratado
+
+
+def _nome_arquivo_seguro(nome):
+    """Guarda so a extensao: nomes de arquivo costumam trazer o nome do paciente."""
+    extensao = os.path.splitext(nome or "")[1].lower().lstrip(".")
+    extensao = "".join(c for c in extensao if c.isalnum())[:5]
+    return f"audio.{extensao}" if extensao else "audio"
 
 
 def _dados_extensao():
@@ -584,6 +742,7 @@ def transcribe_audio_route():
     salva no log e retorna o texto para o chat.
     """
     tmp_path = None
+    consultation_id = None  # o `finally` grava a auditoria com ele, mesmo se algo falhar antes
     try:
         # 1. Validação Básica
         if 'audio_file' not in request.files:
@@ -675,26 +834,32 @@ def transcribe_audio_route():
                 "is_error": True
             }), 200
 
-        # 6. Salvar no Banco (Com o novo campo 'dialogue')
+        # 6. Anonimiza e salva no banco (B36 / US016-CA001). O que fica gravado -
+        #    texto corrido e turnos - e o tokenizado: a fala do paciente passou pelo
+        #    Google e pode conter nome, CPF, telefone.
+        texto_anonimo, turnos_anonimos, mapa = _anonimizar_transcricao(
+            texto_final, dialogue_structure, patient_id, consultation_id
+        )
         log_entry = _transcricoes().adicionar(
             patient_id,
             consultation_id,
-            texto=texto_final,
+            texto=texto_anonimo,
             duracao_s=final_duration if final_duration > 0 else 1.0,
             origem=request.form.get('source') or "extension",
             metadados_audio={
                 "persisted": False,
-                "filename": audio_file.filename,
+                "filename": _nome_arquivo_seguro(audio_file.filename),
                 "content_type": audio_file.content_type,
             },
-            turnos=dialogue_structure,  # Estrutura rica (Medico/Paciente) da diarizacao
+            turnos=turnos_anonimos,  # Estrutura rica (Medico/Paciente) da diarizacao
         )
 
         return jsonify({
             "status": "success",
+            # Para a tela do medico volta o texto real (US016-CA002); o banco guarda tokens.
             "transcription": texto_final,
             "consultation_id": consultation_id,
-            "log_entry": log_entry,  # O frontend vai receber isso e renderizar colorido
+            "log_entry": _reidratar_transcricao(log_entry, mapa),  # O frontend renderiza colorido
             "is_error": False
         }), 200
 
@@ -704,6 +869,9 @@ def transcribe_audio_route():
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Erro interno: {e}"}), 500
     finally:
+        # Auditoria dos envios de audio ao Google (B36), inclusive se a requisicao falhou
+        # no meio: o que ja saiu da maquina precisa constar.
+        _descarregar_envios_audio(consultation_id)
         # Limpeza
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
@@ -725,6 +893,18 @@ def get_transcription_log_api(patient_id):
     except Exception as e:
         print(f"Erro ao buscar logs: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/audit/external-sends', methods=['GET'])
+@roles_required("administrador")
+def list_external_sends():
+    """Auditoria de envios externos (B36 / US016-CA004): so metadados, nunca conteudo.
+
+    Filtros: `consultation_id` e `limit` (padrao 100, maximo 500).
+    """
+    limite = request.args.get("limit", default=100, type=int)
+    envios = _auditoria().listar(request.args.get("consultation_id"), limite)
+    return jsonify({"status": "success", "external_sends": envios, "count": len(envios)}), 200
+
 
 # NOVO ENDPOINT: Verificar existência do Patient ID
 @app.route('/api/patient-exists/<patient_id>', methods=['GET'])
@@ -841,8 +1021,8 @@ def handle_chat_message():
 
         _mensagens().adicionar(consultation_id, "user", texto_anonimo)
 
-        ai_response_text = gemini_connection.send_message(
-            patient_id, consultation_id, texto_anonimo
+        ai_response_text = _enviar_ao_gemini(
+            OPERACAO_CHAT, patient_id, consultation_id, texto_anonimo
         )
 
         # A resposta tambem fica tokenizada no banco; so a exibicao reidrata.
@@ -944,8 +1124,8 @@ def _register_pep_import(patient_id, consultation_id, data, require_typed=False)
         )
 
         _mensagens().adicionar(consultation_id, "user", texto_anonimo)
-        ai_response_text = gemini_connection.send_message(
-            patient_id, consultation_id, texto_anonimo
+        ai_response_text = _enviar_ao_gemini(
+            OPERACAO_EXTENSAO, patient_id, consultation_id, texto_anonimo
         )
         _mensagens().adicionar(consultation_id, "model", ai_response_text)
         # Reidrata so o que volta para a tela do medico.
@@ -1084,7 +1264,7 @@ def upload_pdf():
         _mensagens().adicionar(consultation_id, "user", context_message_for_pdf)
 
         # A assinatura correta é send_message(patient_id: str, consultation_id: str, message_text: str)
-        ai_response_text = gemini_connection.send_message(patient_id, consultation_id, context_message_for_pdf)
+        ai_response_text = _enviar_ao_gemini(OPERACAO_PDF, patient_id, consultation_id, context_message_for_pdf)
 
         # Adiciona a resposta da IA ao histórico da consulta
         _mensagens().adicionar(consultation_id, "model", ai_response_text)
@@ -1267,7 +1447,8 @@ def handle_recommendations():
 
         # Chama a API Gemini. Ela carrega o histórico (incluindo transcrições) e
         # recebe o prompt de recomendação.
-        resposta_ia = gemini_connection.send_message(
+        resposta_ia = _enviar_ao_gemini(
+            OPERACAO_RECOMENDACAO,
             patient_id,
             consultation_id,
             prompt_recomendacao_medica

@@ -77,6 +77,7 @@ erDiagram
     CONSULTA ||--o{ MENSAGEM : contem
     CONSULTA ||--o{ TRANSCRICAO : gera
     CONSULTA ||--o{ DOCUMENTO_SOAP : produz
+    CONSULTA ||--o{ ENVIO_EXTERNO : audita
     CONSULTA ||--o| CONSENTIMENTO : registra
     PACIENTE ||--|| PSEUDONIMO : mapeia
     MEDICO {
@@ -120,6 +121,16 @@ erDiagram
         string provedor
         float duracao_s
         float wer_estimado
+    }
+    ENVIO_EXTERNO {
+        uuid id
+        uuid consulta_id "nulo se o envio nao tem consulta"
+        uuid medico_id
+        string provedor "gemini | google_sr"
+        string operacao "chat | extensao | pdf | recomendacao | transcricao"
+        int tamanho_bytes "SEM conteudo: so metadados"
+        int chamadas
+        datetime criado_em
     }
     DOCUMENTO_SOAP {
         uuid id
@@ -211,6 +222,9 @@ Formato curto. Cada ADR ganha um arquivo em `docs/adr/` no repositório quando a
 ### ADR‑03 — Pseudonimização reversível local
 **Contexto:** D‑11; LGPD exige minimização e o médico precisa ver nomes.
 **Decisão:** `anonymize()` em duas camadas (regex determinística + NER spaCy) substitui por tokens estáveis por consulta; o mapa fica na tabela `pseudonimo`, cifrada (Fernet/AES‑GCM) com chave derivada da senha do médico; a resposta é reidratada só na exibição.
+
+**Auditoria de envios externos (B36).** Toda saída para um provedor externo grava uma linha em `envio_externo` (quando, consulta, provedor, tamanho; **nunca** conteúdo). Há dois pontos únicos de saída, e cada um audita o seu: `_enviar_ao_gemini` (`server.py`) para o LLM e `TranscritorVoz` (`backend/processador_voz`) para o Google SR; testes estruturais falham se surgir chamada fora deles. A transcrição é anonimizada **antes** de gravar (texto e `text` de cada turno; `role`/`speaker_id` ficam). Leitura: `GET /api/audit/external-sends` (administrador; filtros `consultation_id` e `limit`). Falha de auditoria não bloqueia o atendimento (fail-open, logada sem conteúdo).
+
 **Consequência:** payloads externos sem PII verificáveis por teste; custo: nomes de doenças homônimos a pessoas podem ser mascarados (mitigar com lista de exceções médicas).
 
 ### ADR‑04 — Provedor de transcrição configurável, pago por padrão

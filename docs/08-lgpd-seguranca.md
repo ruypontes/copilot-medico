@@ -43,7 +43,7 @@ O CoPilot Médico trata **dados pessoais sensíveis** (dados de saúde, LGPD art
 
 - [ ] Nenhum dado real de paciente em código, teste, fixture, screenshot ou log.
 - [ ] Novo campo de paciente? Está na tabela certa (pseudonimizado vs. cifrado)?
-- [ ] Nova chamada externa? Passa por `anonymize()` e registra auditoria?
+- [ ] Nova chamada externa? Passa por `anonymize()` e registra auditoria? (LLM: use `_enviar_ao_gemini`; Google SR: `TranscritorVoz`; os testes de `test_b36_auditoria.py` barram chamada fora desses pontos.)
 - [ ] Novo log? Sem conteúdo clínico.
 - [ ] Nova permissão no `manifest.json`? Justificada no PR.
 

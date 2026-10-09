@@ -40,6 +40,14 @@ class TranscritorVoz:
     """
     Classe reutilizável para transcrever áudio usando Google Speech Recognition.
     """
+
+    # B36 / US016-CA004: chamado como auditor("google_sr", bytes_de_audio) ANTES de
+    # cada envio ao Google. E atributo de CLASSE de proposito: o Diarizador cria o
+    # proprio TranscritorVoz por dentro, entao registrar por instancia nao alcancaria
+    # os envios dele. Aqui e o unico lugar do projeto que chama recognize_google.
+    # Acessar por `TranscritorVoz.auditor` (na classe) devolve a funcao sem vincula-la.
+    auditor = None
+
     def __init__(self, idioma="pt-BR"):
         self.reconhecedor = sr.Recognizer()
         self.idioma = idioma
@@ -52,6 +60,7 @@ class TranscritorVoz:
         if not isinstance(audio_data, sr.AudioData):
             return "Erro: Dados de áudio inválidos."
 
+        self._auditar_envio(audio_data)
         try:
             texto = self.reconhecedor.recognize_google(audio_data, language=self.idioma)
             return texto
@@ -63,6 +72,18 @@ class TranscritorVoz:
         except Exception as e:
             print(f"Erro inesperado na transcrição: {e}")
             return None
+
+    @staticmethod
+    def _auditar_envio(audio_data):
+        auditor = TranscritorVoz.auditor
+        if auditor is None:
+            return
+        try:
+            auditor("google_sr", len(audio_data.frame_data))
+        except Exception as erro:
+            # A auditoria nunca pode impedir a transcricao. Loga so o TIPO do erro:
+            # nada do que seria enviado vai para o log.
+            print(f"[AUDITORIA] Falha ao registrar envio ao Google SR: {type(erro).__name__}")
 
 class ConstrutorContexto:
     """
