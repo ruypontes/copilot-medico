@@ -375,7 +375,14 @@ def _carregar(caminho: Path, padrao):
         return padrao
     # utf-8-sig: aceita JSON salvo com BOM (comum no Windows).
     with caminho.open(encoding="utf-8-sig") as arquivo:
-        return json.load(arquivo)
+        try:
+            return json.load(arquivo)
+        except json.JSONDecodeError as erro:
+            raise ArquivoInvalido(f"{caminho} nao e um JSON valido ({erro}).") from erro
+
+
+class ArquivoInvalido(ValueError):
+    pass
 
 
 def _imprimir(rel: Relatorio, simulacao: bool) -> None:
@@ -408,8 +415,12 @@ def main(argv=None) -> int:
                         help=f"migra tambem o paciente de demonstracao {SEED_ID}")
     args = parser.parse_args(argv)
 
-    pacientes = _carregar(args.pacientes, {})
-    usuarios = _carregar(args.usuarios, {"users": []})
+    try:
+        pacientes = _carregar(args.pacientes, {})
+        usuarios = _carregar(args.usuarios, {"users": []})
+    except ArquivoInvalido as erro:
+        print(f"Erro: {erro} Nada foi gravado.")
+        return 1
     if not isinstance(pacientes, dict) or not isinstance(usuarios, dict):
         print("Erro: formato inesperado (patients_db.json e users_db.json sao objetos JSON).")
         return 1

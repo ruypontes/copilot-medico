@@ -272,3 +272,11 @@ def test_cli_aceita_json_com_bom(tmp_path):
 
     assert mig.main(args) == 0
     assert _contar_pacientes(args[-1]) == 2
+
+
+def test_cli_json_invalido_da_erro_claro(tmp_path, capsys):
+    args = _arquivos(tmp_path)
+    Path(args[1]).write_text("", encoding="utf-8")
+
+    assert mig.main(args) == 1
+    assert "nao e um JSON valido" in capsys.readouterr().out
