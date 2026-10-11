@@ -373,7 +373,8 @@ def _carregar(caminho: Path, padrao):
     if not caminho.exists():
         print(f"[aviso] {caminho} nao existe; nada a migrar dele.")
         return padrao
-    with caminho.open(encoding="utf-8") as arquivo:
+    # utf-8-sig: aceita JSON salvo com BOM (comum no Windows).
+    with caminho.open(encoding="utf-8-sig") as arquivo:
         return json.load(arquivo)
 
 

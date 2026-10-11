@@ -263,3 +263,12 @@ def test_cli_sem_arquivos_nao_falha(tmp_path):
 
     assert mig.main(["--pacientes", str(tmp_path / "x.json"), "--usuarios",
                      str(tmp_path / "y.json"), "--db-url", url]) == 0
+
+
+def test_cli_aceita_json_com_bom(tmp_path):
+    args = _arquivos(tmp_path)
+    arquivo = Path(args[1])
+    arquivo.write_bytes(b"\xef\xbb\xbf" + arquivo.read_bytes())
+
+    assert mig.main(args) == 0
+    assert _contar_pacientes(args[-1]) == 2
