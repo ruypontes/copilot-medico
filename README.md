@@ -78,10 +78,19 @@ Sobe três serviços:
 > `API/repositories/`). O backend aplica as migrações sozinho ao iniciar
 > (`alembic upgrade head`).
 >
-> **Dados antigos:** o que estava em `patients_db.json` / `users_db.json`
-> **não aparece** até o B21 copiar esses arquivos para o banco. Eles continuam
-> no volume `backend_data`, intactos. Até lá, o admin inicial é recriado a
-> partir de `AUTH_BOOTSTRAP_*` no `API/.env`.
+> **Dados antigos (`patients_db.json` / `users_db.json`):** a aplicação não
+> lê mais esses arquivos. Para trazê-los para o banco, rode a migração do B21
+> uma vez (os arquivos ficam no volume `backend_data`, intactos):
+>
+> ```bash
+> docker compose exec backend python scripts/migrate_json_db.py --dry-run
+> docker compose exec backend python scripts/migrate_json_db.py
+> ```
+>
+> O script preserva IDs e senhas (os usuários entram com a mesma senha), pode
+> ser rodado de novo sem duplicar nada, descarta o paciente de demonstração
+> `paciente_abc` (P11) e só grava se a conferência final bater o JSON com o
+> banco. Fora do Docker: `cd API && python scripts/migrate_json_db.py`.
 
 ### Extensão Chrome
 
