@@ -19,15 +19,22 @@ from backend.auth_service import (
     AuthError,
     authenticate_user,
     approve_doctor_request,
+    check_account_lockout,
+    check_login_rate_limit,
     create_access_token,
     create_doctor_registration,
+    create_refresh_token,
+    exchange_refresh_token,
     get_profile_details,
     is_valid_email,
     list_doctor_requests,
     normalize_email,
     normalize_profile,
     normalize_profiles,
+    register_failed_login,
+    register_login_attempt,
     reject_doctor_request,
+    reset_login_lockout,
     sanitize_user,
     validate_user_profile_access,
 )
@@ -282,8 +289,8 @@ def _normalize_transcriptions_for_extension_response(logs):
     return normalized
 
 
-def _auth_success_response(user, profile, token, expires_in):
-    return jsonify({
+def _auth_success_response(user, profile, token, expires_in, refresh_token=None, refresh_expires_in=None):
+    payload = {
         "status": "success",
         "token": token,
         "token_type": "Bearer",
@@ -294,7 +301,11 @@ def _auth_success_response(user, profile, token, expires_in):
             get_profile_details(user_profile)
             for user_profile in normalize_profiles(user.get("profiles"))
         ],
-    }), 200
+    }
+    if refresh_token is not None:
+        payload["refresh_token"] = refresh_token
+        payload["refresh_expires_in"] = refresh_expires_in
+    return jsonify(payload), 200
 
 
 def _format_extension_extracted_data(extracted_content, source_url=None):
@@ -355,8 +366,17 @@ def login():
     if not requested_profile:
         return _json_error("Perfil e obrigatorio.", 400)
 
+    client_ip = request.remote_addr or "unknown"
+    try:
+        check_login_rate_limit(client_ip)
+        check_account_lockout(email)
+    except AuthError as exc:
+        return _json_error(exc.message, exc.status_code)
+
     user = authenticate_user(email, password, require_active=False)
+    register_login_attempt(client_ip)
     if not user:
+        register_failed_login(email)
         return _json_error("Email ou senha invalidos", 401)
 
     profiles = normalize_profiles(user.get("profiles"))
@@ -366,8 +386,11 @@ def login():
     try:
         validate_user_profile_access(user, requested_profile)
         token, expires_in = create_access_token(user, requested_profile)
+        refresh_token, refresh_expires_in = create_refresh_token(user, requested_profile)
     except AuthError as exc:
         return _json_error(exc.message, exc.status_code)
+
+    reset_login_lockout(email)
 
     # Cofre de cifra (B26): este e o unico momento em que a senha em claro
     # passa pelo servidor, logo o unico em que a DEK pode ser desembrulhada.
@@ -382,7 +405,44 @@ def login():
         # protegendo o payload externo mesmo sem cofre.
         print(f"[ANONIMIZACAO] Nao foi possivel preparar o cofre do medico: {erro}")
 
-    return _auth_success_response(user, requested_profile, token, expires_in)
+    return _auth_success_response(
+        user, requested_profile, token, expires_in, refresh_token, refresh_expires_in
+    )
+
+
+@app.route('/api/auth/refresh', methods=['POST'])
+def refresh_token_route():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+
+    refresh_token = data.get("refresh_token")
+    if not isinstance(refresh_token, str) or not refresh_token:
+        return _json_error("refresh_token e obrigatorio.", 400)
+
+    try:
+        token, expires_in, _user = exchange_refresh_token(refresh_token)
+    except AuthError as exc:
+        return _json_error(exc.message, exc.status_code)
+
+    # Cofre de cifra (B26): o cofre fica associado ao token de acesso antigo
+    # (backend/anonimizacao/cofres.py). Se o cliente mandar o access token
+    # antigo (mesmo expirado) no header Authorization, "mudamos" o cofre dele
+    # para o token novo - sem isso, o medico perderia a cifra dos dados ate
+    # logar de novo, so por ter renovado o access token.
+    token_antigo = _token_da_requisicao()
+    if token_antigo and token_antigo != token:
+        cofre = anonimizacao_servico.cofre_da_sessao(token_antigo)
+        if cofre is not None:
+            anonimizacao_servico.registrar_sessao(token, cofre)
+            anonimizacao_servico.encerrar_sessao(token_antigo)
+
+    return jsonify({
+        "status": "success",
+        "token": token,
+        "token_type": "Bearer",
+        "expires_in": expires_in,
+    }), 200
 
 
 @app.route('/api/auth/logout', methods=['POST'])
@@ -439,10 +499,23 @@ def select_profile():
 
     try:
         token, expires_in = create_access_token(g.current_user, selected_profile)
+        refresh_token, refresh_expires_in = create_refresh_token(g.current_user, selected_profile)
     except AuthError as exc:
         return _json_error(exc.message, exc.status_code)
 
-    return _auth_success_response(g.current_user, selected_profile, token, expires_in)
+    # Cofre de cifra (B26): troca de perfil tambem gera um token novo - leva
+    # o cofre aberto (se houver) do token antigo para o novo, pelo mesmo
+    # motivo do /api/auth/refresh.
+    token_antigo = _token_da_requisicao()
+    if token_antigo and token_antigo != token:
+        cofre = anonimizacao_servico.cofre_da_sessao(token_antigo)
+        if cofre is not None:
+            anonimizacao_servico.registrar_sessao(token, cofre)
+            anonimizacao_servico.encerrar_sessao(token_antigo)
+
+    return _auth_success_response(
+        g.current_user, selected_profile, token, expires_in, refresh_token, refresh_expires_in
+    )
 
 
 @app.route('/api/auth/me', methods=['GET'])

@@ -1,6 +1,7 @@
 # Subconjunto de requirements.txt suficiente para importar server.py com os
 # stubs de teste ativos. Mantenha as versoes em sincronia com requirements.txt.
 Flask==3.0.3
+PyJWT==2.9.0
 Flask-Cors
 pydantic-settings
 # Cifra do B26; os testes de ida e volta dependem dela.

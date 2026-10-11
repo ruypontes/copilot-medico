@@ -1,23 +1,16 @@
-import base64
-import hashlib
-import hmac
-import json
 import re
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 
+import jwt as pyjwt
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from repositories import MedicoRepository, sessao
 
 from .config import settings
-
-try:
-    import jwt as pyjwt
-except ImportError:  # pragma: no cover - optional dependency
-    pyjwt = None
 
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -95,47 +88,93 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _base64url_encode(raw: bytes) -> str:
-    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+def validate_password_policy(password: Any) -> None:
+    """Levanta ValueError se a senha nao atender a politica minima (B22).
+
+    Nao mexe em como a senha e guardada (continua werkzeug/scrypt) - so valida
+    o texto da senha antes de gerar o hash.
+    """
+    if not isinstance(password, str) or not password:
+        raise ValueError("Senha obrigatoria")
+    if len(password) < settings.auth_password_min_length:
+        raise ValueError(
+            f"Senha deve ter pelo menos {settings.auth_password_min_length} caracteres"
+        )
+    if not re.search(r"[A-Za-z]", password):
+        raise ValueError("Senha deve conter pelo menos uma letra")
+    if not re.search(r"\d", password):
+        raise ValueError("Senha deve conter pelo menos um numero")
 
 
-def _base64url_decode(value: str) -> bytes:
-    padding = "=" * (-len(value) % 4)
-    return base64.urlsafe_b64decode((value + padding).encode("ascii"))
+# --- Rate limit e lockout do login (B22 / D-26) ---------------------------
+# Implementacao em memoria (reinicia quando o servidor reinicia). Suficiente
+# para o escopo deste ticket; se no futuro houver varias instancias do
+# backend rodando ao mesmo tempo, isso precisaria virar um armazenamento
+# compartilhado (ex. Redis).
+_rate_limit_lock = threading.Lock()
+_login_attempts_by_ip: dict[str, list[float]] = {}
+_lockouts_by_email: dict[str, dict[str, Any]] = {}
 
 
-def _fallback_jwt_encode(payload: dict[str, Any], secret: str) -> str:
-    header = {"alg": "HS256", "typ": "JWT"}
-    header_part = _base64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
-    payload_part = _base64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
-    signing_input = f"{header_part}.{payload_part}".encode("ascii")
-    signature = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
-    return f"{header_part}.{payload_part}.{_base64url_encode(signature)}"
+def check_login_rate_limit(ip: str) -> None:
+    now = _utcnow().timestamp()
+    window = settings.auth_login_rate_limit_window_seconds
+    max_attempts = settings.auth_login_rate_limit_attempts
+    with _rate_limit_lock:
+        attempts = [t for t in _login_attempts_by_ip.get(ip or "unknown", []) if now - t < window]
+        _login_attempts_by_ip[ip or "unknown"] = attempts
+        if len(attempts) >= max_attempts:
+            raise AuthError(
+                "Muitas tentativas de login a partir deste endereco. Tente novamente mais tarde.",
+                429,
+            )
 
 
-def _fallback_jwt_decode(token: str, secret: str) -> dict[str, Any]:
-    try:
-        header_part, payload_part, signature_part = token.split(".")
-    except ValueError as exc:
-        raise AuthError("Token invalido", 401) from exc
+def register_login_attempt(ip: str) -> None:
+    now = _utcnow().timestamp()
+    with _rate_limit_lock:
+        _login_attempts_by_ip.setdefault(ip or "unknown", []).append(now)
 
-    signing_input = f"{header_part}.{payload_part}".encode("ascii")
-    expected = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
-    provided = _base64url_decode(signature_part)
 
-    if not hmac.compare_digest(expected, provided):
-        raise AuthError("Token invalido", 401)
 
-    header = json.loads(_base64url_decode(header_part))
-    if header.get("alg") != "HS256":
-        raise AuthError("Token invalido", 401)
+def check_account_lockout(email: str) -> None:
+    normalized_email = normalize_email(email)
+    with _rate_limit_lock:
+        record = _lockouts_by_email.get(normalized_email)
+        if record is None:
+            return
 
-    payload = json.loads(_base64url_decode(payload_part))
-    exp = payload.get("exp")
-    if isinstance(exp, (int, float)) and _utcnow().timestamp() > exp:
-        raise AuthError("Token expirado", 401)
-    return payload
+        locked_until = record.get("locked_until", 0)
+        if locked_until > _utcnow().timestamp():
+            raise AuthError(
+                "Conta temporariamente bloqueada por excesso de tentativas. Tente novamente mais tarde.",
+                403,
+            )
+        if locked_until:
+            # O bloqueio ja passou (locked_until > 0, mas no passado):
+            # descarta o registro antigo, senao o contador de falhas
+            # continuaria acumulado e uma unica tentativa errada depois do
+            # prazo re-bloquearia a conta na hora. Um registro com
+            # locked_until == 0 so significa "ainda nao bateu o limite de
+            # falhas" - esse continua acumulando normalmente.
+            _lockouts_by_email.pop(normalized_email, None)
 
+
+
+def register_failed_login(email: str) -> None:
+    normalized_email = normalize_email(email)
+    now = _utcnow().timestamp()
+    with _rate_limit_lock:
+        record = _lockouts_by_email.setdefault(normalized_email, {"failed": 0, "locked_until": 0})
+        record["failed"] += 1
+        if record["failed"] >= settings.auth_login_lockout_attempts:
+            record["locked_until"] = now + settings.auth_login_lockout_seconds
+
+
+def reset_login_lockout(email: str) -> None:
+    normalized_email = normalize_email(email)
+    with _rate_limit_lock:
+        _lockouts_by_email.pop(normalized_email, None)
 
 @lru_cache(maxsize=1)
 def get_auth_secret() -> str:
@@ -196,7 +235,12 @@ def bootstrap_users_if_needed() -> None:
     if not profiles:
         profiles = ["administrador"]
 
-    create_user(email, password, settings.auth_bootstrap_name, profiles)
+    try:
+        create_user(email, password, settings.auth_bootstrap_name, profiles)
+    except ValueError as exc:
+        # Nao derruba o servidor por causa de uma senha de bootstrap antiga
+        # que nao segue mais a politica (B22). So avisa no log.
+        print(f"[AUTH] Nao foi possivel criar o usuario de bootstrap: {exc}")
 
 
 def create_user(
@@ -211,8 +255,7 @@ def create_user(
     email = normalize_email(email)
     if not is_valid_email(email):
         raise ValueError("Email invalido")
-    if not isinstance(password, str) or not password:
-        raise ValueError("Senha obrigatoria")
+    validate_password_policy(password)
 
     normalized_profiles = normalize_profiles(profiles)
     if not normalized_profiles:
@@ -437,27 +480,47 @@ def create_access_token(user: dict[str, Any], profile: str) -> tuple[str, int]:
         "sub": user.get("id"),
         "email": user.get("email"),
         "profile": normalized_profile,
+        "type": "access",
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=expires_in)).timestamp()),
     }
 
     secret = get_auth_secret()
-    if pyjwt:
-        token = pyjwt.encode(payload, secret, algorithm="HS256")
-    else:
-        token = _fallback_jwt_encode(payload, secret)
+    token = pyjwt.encode(payload, secret, algorithm="HS256")
+    return token, expires_in
+
+
+def create_refresh_token(user: dict[str, Any], profile: str) -> tuple[str, int]:
+    """Gera o refresh token (B22): vida mais longa, usado so para pedir um
+    novo access token em /api/auth/refresh - nunca aceito nas rotas protegidas.
+    """
+    normalized_profile = normalize_profile(profile)
+    expires_in = int(settings.auth_refresh_token_expiration_days) * 24 * 60 * 60
+    now = _utcnow()
+    payload = {
+        "sub": user.get("id"),
+        "profile": normalized_profile,
+        "type": "refresh",
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=expires_in)).timestamp()),
+    }
+
+    secret = get_auth_secret()
+    token = pyjwt.encode(payload, secret, algorithm="HS256")
     return token, expires_in
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
+    """Decodifica e valida a assinatura/expiracao de qualquer token nosso
+    (access ou refresh). Quem chama decide se o "type" do payload e o
+    esperado - veja get_user_from_token e exchange_refresh_token.
+    """
     if not token:
         raise AuthError("Token obrigatorio", 401)
 
     secret = get_auth_secret()
     try:
-        if pyjwt:
-            return pyjwt.decode(token, secret, algorithms=["HS256"])
-        return _fallback_jwt_decode(token, secret)
+        return pyjwt.decode(token, secret, algorithms=["HS256"])
     except AuthError:
         raise
     except Exception as exc:
@@ -466,6 +529,10 @@ def decode_access_token(token: str) -> dict[str, Any]:
 
 def get_user_from_token(token: str) -> tuple[dict[str, Any], dict[str, Any]]:
     payload = decode_access_token(token)
+    if payload.get("type", "access") != "access":
+        # Um refresh token nao pode ser usado para acessar rotas protegidas.
+        raise AuthError("Token invalido", 401)
+
     user = find_user_by_id(payload.get("sub"))
     profile = normalize_profile(payload.get("profile"))
 
@@ -475,6 +542,24 @@ def get_user_from_token(token: str) -> tuple[dict[str, Any], dict[str, Any]]:
         raise AuthError("Perfil nao permitido para este usuario", 403)
 
     return user, payload
+
+
+def exchange_refresh_token(refresh_token: str) -> tuple[str, int, dict[str, Any]]:
+    """Troca um refresh token valido por um novo access token (rota
+    /api/auth/refresh). Nao exige o usuario estar com token de acesso -
+    o proprio refresh token e a credencial.
+    """
+    payload = decode_access_token(refresh_token)
+    if payload.get("type") != "refresh":
+        raise AuthError("Este endpoint espera um refresh token.", 401)
+
+    user = find_user_by_id(payload.get("sub"))
+    if not user or not user.get("active", True):
+        raise AuthError("Token invalido", 401)
+
+    profile = normalize_profile(payload.get("profile"))
+    token, expires_in = create_access_token(user, profile)
+    return token, expires_in, user
 
 
 def user_has_profile(user: dict[str, Any], profile: str) -> bool:
