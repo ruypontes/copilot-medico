@@ -10,12 +10,29 @@ import type { TranscriptionLogItem } from "../shared/types";
 /** Onde o background.js guarda o RecordingSnapshot (chrome.storage.session: só em memória). */
 export const RECORDING_STATE_KEY = "copmed_recording_state";
 
+/**
+ * Só para testes manuais: permite ENCURTAR (nunca aumentar) um prazo por variável do Vite,
+ * para não esperar 5 e 120 minutos de gravação. Ex., em front/copmed-extension/.env.local:
+ *   VITE_RECORDING_CHUNK_SECONDS=20
+ *   VITE_RECORDING_MAX_SECONDS=90
+ */
+export function shortenedBy(seconds: unknown, defaultMs: number): number {
+  const value = Number(seconds);
+  return Number.isFinite(value) && value > 0 ? Math.min(defaultMs, value * 1000) : defaultMs;
+}
+
 /** US017-CA002: a gravação para sozinha ao atingir 120 min. */
-export const MAX_RECORDING_MS = 120 * 60 * 1000;
+export const MAX_RECORDING_MS = shortenedBy(
+  import.meta.env.VITE_RECORDING_MAX_SECONDS,
+  120 * 60 * 1000
+);
 /** US017-CA003: o áudio segue para o backend em partes de até 5 min. */
 export const CHUNK_MAX_MS = 5 * 60 * 1000;
 // A troca de parte é conferida a cada ~1 s; a folga garante que nenhuma parte passe de 5 min.
-export const CHUNK_ROTATION_MS = CHUNK_MAX_MS - 5000;
+export const CHUNK_ROTATION_MS = shortenedBy(
+  import.meta.env.VITE_RECORDING_CHUNK_SECONDS,
+  CHUNK_MAX_MS - 5000
+);
 
 export type RecordingStatus = "idle" | "recording" | "paused" | "finalizing";
 
