@@ -267,6 +267,13 @@ export function sendExtractedData(payload: Record<string, unknown>) {
   });
 }
 
+export function sendPepImport(consultationId: string, payload: Record<string, unknown>) {
+  return apiRequest(`/api/consultations/${encodeURIComponent(consultationId)}/pep-import`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getTranscriptionLog(patientId: string) {
   return apiRequest(`/api/patients/${encodeURIComponent(patientId)}/transcription-log`);
 }

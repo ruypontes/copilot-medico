@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
 
     auth_secret_key: str = ""
-    auth_token_expiration_minutes: int = 60
+    auth_token_expiration_minutes: int = 15
     # Bancos JSON antigos (pre-B20). A aplicacao nao os le mais; ficam
     # configuraveis so para o script de migracao JSON -> banco do B21.
     auth_users_db_file: str = str(Path(__file__).with_name("users_db.json"))
@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     auth_bootstrap_password: str = ""
     auth_bootstrap_name: str = "Administrador"
     auth_bootstrap_profiles: str = "administrador"
+
+    # B22 - refresh token, politica de senha, rate limit e lockout no login.
+    auth_refresh_token_expiration_days: int = 7
+    auth_password_min_length: int = 8
+    auth_login_rate_limit_attempts: int = 10
+    auth_login_rate_limit_window_seconds: int = 300
+    auth_login_lockout_attempts: int = 5
+    auth_login_lockout_seconds: int = 900
 
     # Use "*" em desenvolvimento; em producao prefira lista separada por virgulas.
     cors_origins: str = "*"

@@ -15,6 +15,7 @@ import {
   gravacaoSalva,
   instalarFakes,
 } from "./test/extensaoFake";
+import fixtureAmplimed from "../tests/fixtures/pep/amplimed-consulta.html?raw";
 
 // Testes de comportamento da extensão pela interface: a API e o chrome.storage são simulados,
 // então os mesmos testes valem para qualquer organização interna do App.
@@ -238,6 +239,40 @@ describe("chat e transcrições", () => {
     screen.getByText(/^Transcrição de /);
     fireEvent.click(screen.getByRole("button", { name: "❌ Fechar Arquivo" }));
     await waitFor(() => expect(screen.queryByText("Bom dia, o que houve?")).toBeNull());
+  });
+
+  it("extrai a fixture Amplimed e envia campos tipados para a rota pep-import", async () => {
+    const fixtureHolder = document.createElement("div");
+    fixtureHolder.innerHTML = fixtureAmplimed;
+    document.body.append(fixtureHolder);
+
+    try {
+      await abrirComPacienteSalvo();
+      fireEvent.click(screen.getByRole("button", { name: "Extrair Dados da Página" }));
+
+      await waitFor(() => {
+        expect(chamadasPara("POST", "/api/consultations/c1xxxxxxxx/pep-import")).toHaveLength(1);
+      });
+      expect(chamadasPara("POST", "/api/consultations/c1xxxxxxxx/pep-import")[0].body).toMatchObject({
+        pep_origem: "amplimed",
+        campos: {
+          peso: "72.5",
+          altura: "1.68",
+          imc: "25.7",
+          tempe: "37.8",
+          freqres: "18",
+          freqcar: "88",
+          pas: "120",
+          pad: "80",
+          anamnese: "Paciente relata febre há 3 dias com tosse seca e dor de garganta.",
+          exame_fisico: "Sem sinais de desidratação, murmúrio vesicular presente e sem roncos.",
+          conclusao_diagnostica: "Quadro compatível com virose, manter hidratação e observação.",
+          lista_problemas: "Febre, tosse, dor de garganta.",
+        },
+      });
+    } finally {
+      fixtureHolder.remove();
+    }
   });
 });
 

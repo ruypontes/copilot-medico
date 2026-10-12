@@ -14,7 +14,7 @@ except ImportError:
     from processador_voz import TranscritorVoz
 
 # --- CONFIGURAÇÃO DE TESTE ---
-MODO_TESTE_SOZINHO = True
+MODO_TESTE_SOZINHO = False
 
 
 class Diarizador:
@@ -78,16 +78,26 @@ class Diarizador:
         rec = KaldiRecognizer(self.model, target_rate, self.spk_model)
         rec.SetWords(True)
 
+
         raw_segments = []
         step = 4000
+
         for i in range(0, len(audio_mono), step):
             data = audio_mono[i:i + step]
+
             if rec.AcceptWaveform(data):
                 res = json.loads(rec.Result())
-                if 'spk' in res: raw_segments.append(res)
 
+                # Preserva o texto mesmo quando não existe vetor de falante.
+                if res.get('result') and res.get('text', '').strip():
+                    raw_segments.append(res)
+
+        # Finaliza o reconhecimento somente depois de processar todo o áudio.
         res_final = json.loads(rec.FinalResult())
-        if 'spk' in res_final: raw_segments.append(res_final)
+
+        if res_final.get('result') and res_final.get('text', '').strip():
+            raw_segments.append(res_final)
+
 
         # 4. Fusão e Classificação
         merged_segments = self._mesclar_e_classificar(raw_segments)
@@ -151,99 +161,132 @@ class Diarizador:
             "speakers_count": len(unique_ids)
         }
 
+
     def _mesclar_e_classificar(self, raw_segments):
         """
-        Lógica de fusão (Mantida igual, com suporte a Modo Teste)
-        """
-        if not raw_segments: return []
+        Agrupa segmentos de áudio sem descartar texto quando falta
+        o vetor de identificação do falante.
 
+        A identidade vocal pode ser estimada pelos vetores disponíveis,
+        mas a função clínica (médico/paciente) não é inferida.
+        """
+        if not raw_segments:
+            return []
+
+        MAX_SILENCE = 1.5
+        SIMILARITY_THRESHOLD = 0.8
         merged = []
 
-        first = raw_segments[0]
-        current_block = {
-            'start': first['result'][0]['start'],
-            'end': first['result'][-1]['end'],
-            'spk_vec': np.array(first['spk']),
-            'count': 1,
-            'text_combined': first.get('text', '')
-        }
+        for raw in raw_segments:
+            # Ignora resultados sem palavras ou tempos utilizáveis.
+            words = raw.get("result") or []
+            text = (raw.get("text") or "").strip()
 
-        # Configurações de Fusão
-        MAX_SILENCE = 2.5
-        SIMILARITY_THRESHOLD = 0.8
+            if not words or not text:
+                continue
 
-        for i in range(1, len(raw_segments)):
-            next_raw = raw_segments[i]
-            next_start = next_raw['result'][0]['start']
-            next_end = next_raw['result'][-1]['end']
-            next_vec = np.array(next_raw['spk'])
+            try:
+                start = float(words[0]["start"])
+                end = float(words[-1]["end"])
+            except (KeyError, TypeError, ValueError, IndexError):
+                continue
 
-            silence = next_start - current_block['end']
+            if end < start:
+                continue
 
-            should_merge = False
+            # O vetor de falante pode não existir.
+            spk = raw.get("spk")
+            try:
+                vec = np.asarray(spk, dtype=float) if spk is not None else None
+                if vec is not None and (vec.size == 0 or not np.all(np.isfinite(vec))):
+                    vec = None
+            except (TypeError, ValueError):
+                vec = None
 
-            if MODO_TESTE_SOZINHO:
-                # No modo teste, junta se for rápido (< 1.5s)
-                if silence < 1.5:
-                    should_merge = True
-            else:
-                # Modo Real: Verifica voz e silêncio
-                avg_vec = current_block['spk_vec'] / current_block['count']
-                dist = np.linalg.norm(avg_vec - next_vec)
-                if silence < MAX_SILENCE and dist < SIMILARITY_THRESHOLD:
-                    should_merge = True
+            current = {
+                "start": start,
+                "end": end,
+                "text_combined": text,
+                "spk_vec": vec.copy() if vec is not None else None,
+                "count": 1,
+            }
 
-            if should_merge:
-                current_block['end'] = next_end
-                current_block['spk_vec'] += next_vec
-                current_block['count'] += 1
-                current_block['text_combined'] += " " + next_raw.get('text', '')
-            else:
-                current_block['final_vec'] = current_block['spk_vec'] / current_block['count']
-                merged.append(current_block)
-                current_block = {
-                    'start': next_start, 'end': next_end, 'spk_vec': next_vec,
-                    'count': 1, 'text_combined': next_raw.get('text', '')
-                }
+            if merged:
+                previous = merged[-1]
+                silence = start - previous["end"]
+                prev_vec = previous["spk_vec"]
 
-        current_block['final_vec'] = current_block['spk_vec'] / current_block['count']
-        merged.append(current_block)
+                should_merge = False
 
-        # --- CLASSIFICAÇÃO ---
+                if 0 <= silence < MAX_SILENCE:
+                    if prev_vec is None and vec is None:
+                        # Sem vetores, juntar texto próximo não significa
+                        # que sabemos quem falou.
+                        should_merge = True
+                    elif prev_vec is not None and vec is not None:
+                        if prev_vec.shape == vec.shape:
+                            avg_vec = prev_vec / previous["count"]
+                            distance = np.linalg.norm(avg_vec - vec)
+                            should_merge = distance < SIMILARITY_THRESHOLD
+
+                if should_merge:
+                    previous["end"] = end
+                    previous["text_combined"] += " " + text
+
+                    if vec is not None:
+                        if previous["spk_vec"] is None:
+                            previous["spk_vec"] = vec.copy()
+                            previous["count"] = 1
+                        else:
+                            previous["spk_vec"] += vec
+                            previous["count"] += 1
+                    continue
+
+            merged.append(current)
+
+        # Agrupa vetores semelhantes, quando disponíveis.
         known_speakers = []
         GLOBAL_THRESHOLD = 0.75
-        forced_id_counter = 0
 
         for block in merged:
-            if MODO_TESTE_SOZINHO:
-                speaker_id = forced_id_counter % 2
-                forced_id_counter += 1
+            vec = block["spk_vec"]
+
+            if vec is None:
+                block["speaker_id"] = None
+                block["role"] = "Falante não identificado"
+                block["role_key"] = "unknown"
+                block.pop("spk_vec", None)
+                block.pop("count", None)
+                continue
+
+            final_vec = vec / max(block["count"], 1)
+            best_idx = -1
+            min_dist = float("inf")
+
+            for idx, known_vec in enumerate(known_speakers):
+                if final_vec.shape != known_vec.shape:
+                    continue
+
+                distance = np.linalg.norm(final_vec - known_vec)
+                if distance < min_dist:
+                    min_dist = distance
+                    best_idx = idx
+
+            if best_idx != -1 and min_dist < GLOBAL_THRESHOLD:
+                speaker_id = best_idx
+                known_speakers[best_idx] = (
+                    known_speakers[best_idx] * 0.8 + final_vec * 0.2
+                )
             else:
-                vec = block['final_vec']
-                best_idx = -1
-                min_dist = float('inf')
-                for idx, known_vec in enumerate(known_speakers):
-                    dist = np.linalg.norm(vec - known_vec)
-                    if dist < min_dist:
-                        min_dist = dist
-                        best_idx = idx
+                known_speakers.append(final_vec.copy())
+                speaker_id = len(known_speakers) - 1
 
-                if min_dist < GLOBAL_THRESHOLD and best_idx != -1:
-                    speaker_id = best_idx
-                    known_speakers[best_idx] = (known_speakers[best_idx] * 0.8) + (vec * 0.2)
-                else:
-                    known_speakers.append(vec)
-                    speaker_id = len(known_speakers) - 1
+            # Distinguir vozes não comprova quem é médico ou paciente.
+            block["speaker_id"] = speaker_id
+            block["role"] = f"Falante {speaker_id + 1} (função não identificada)"
+            block["role_key"] = "unknown"
 
-            if speaker_id == 0:
-                role, role_key = "Médico", "doctor"
-            elif speaker_id == 1:
-                role, role_key = "Paciente", "patient"
-            else:
-                role, role_key = "Outro", "other"
-
-            block['role'] = role
-            block['role_key'] = role_key
-            block['speaker_id'] = speaker_id
+            block.pop("spk_vec", None)
+            block.pop("count", None)
 
         return merged

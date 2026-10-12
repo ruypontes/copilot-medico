@@ -50,8 +50,8 @@ services:
       - ./API/.env
     environment:
       # Os dados agora ficam no Postgres (B20). Os JSON antigos continuam no
-      # volume so para o script de migracao do B21 le-los; depois disso estas
-      # variaveis e o volume saem.
+      # volume para o scripts/migrate_json_db.py (B21) le-los; quando todos os
+      # ambientes tiverem migrado, estas variaveis e o volume podem sair.
       PATIENTS_DB_FILE: /app/data/patients_db.json
       AUTH_USERS_DB_FILE: /app/data/users_db.json
     ports:
