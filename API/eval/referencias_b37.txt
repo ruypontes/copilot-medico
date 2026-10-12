@@ -25,7 +25,7 @@ Os casos são inteiramente fictícios e não representam atendimentos reais.
 
 ### 3. Áudio 01 — Suspeita de dengue
 
-**Arquivo:** `a1.wav`  
+**Arquivo:** `caso-01-dengue.wav`  
 **Cenário:** Febre, dores no corpo e dor retro-orbitária.
 
 #### Transcrição-gabarito
@@ -72,7 +72,7 @@ MÉDICO: Certo. Vamos avaliar sua hidratação e verificar sinais de alerta. Se 
 
 ### 4. Áudio 02 — Infecção respiratória
 
-**Arquivo:** `a2.wav`  
+**Arquivo:** `caso-02-infeccao-respiratoria.wav`  
 **Cenário:** Tosse há cinco dias, alteração do tipo de secreção e febre recente.
 
 #### Transcrição-gabarito
@@ -116,7 +116,7 @@ MÉDICO: Certo. Vou examinar sua respiração e avaliar a necessidade de exames 
 
 ### 5. Áudio 03 — Hipertensão arterial
 
-**Arquivo:** `a3.wav`  
+**Arquivo:** `caso-03-hipertensao.wav`  
 **Cenário:** Pressão arterial elevada em medida realizada na farmácia e esquecimento de doses.
 
 #### Transcrição-gabarito
@@ -162,7 +162,7 @@ MÉDICO: Vamos repetir a medida em condições adequadas e revisar o uso do medi
 
 ### 6. Áudio 04 — Diabetes e glicemia elevada
 
-**Arquivo:** `a4.wav`  
+**Arquivo:** `caso-04-diabetes.wav`  
 **Cenário:** Glicemia de jejum elevada, uso de metformina e sintomas associados.
 
 #### Transcrição-gabarito
@@ -207,7 +207,7 @@ MÉDICO: Vamos revisar seus exames, os sintomas e o tratamento para definir a pr
 
 ### 7. Áudio 05 — Infecção urinária
 
-**Arquivo:** `a5.wav`  
+**Arquivo:** `caso-05-infeccao-urinaria.wav`  
 **Cenário:** Ardência ao urinar, aumento da frequência urinária e desconforto abdominal inferior.
 
 #### Transcrição-gabarito
@@ -250,7 +250,7 @@ MÉDICO: Vamos avaliar os sintomas e verificar se é necessário fazer um exame 
 
 ### 8. Áudio 06 — Dor de cabeça
 
-**Arquivo:** `a6.wav`  
+**Arquivo:** `caso-06-cefaleia.wav`  
 **Cenário:** Dor de cabeça pulsátil, unilateral e associada à sensibilidade à luz.
 
 #### Transcrição-gabarito
@@ -295,7 +295,7 @@ MÉDICO: Vou avaliar as características da dor e fazer um exame neurológico pa
 
 ### 9. Áudio 07 — Gastroenterite
 
-**Arquivo:** `a7.wav`  
+**Arquivo:** `caso-07-gastroenterite.wav`  
 **Cenário:** Diarreia, vômitos e dificuldade para manter a ingestão de líquidos.
 
 #### Transcrição-gabarito
@@ -339,7 +339,7 @@ MÉDICO: Vamos avaliar sua hidratação e orientar a reposição de líquidos co
 
 ### 10. Áudio 08 — Asma e chiado no peito
 
-**Arquivo:** `a8.wav`  
+**Arquivo:** `caso-08-asma.wav`  
 **Cenário:** Piora da respiração após exposição à poeira e alívio pouco duradouro com salbutamol.
 
 #### Transcrição-gabarito
@@ -383,7 +383,7 @@ MÉDICO: Vamos avaliar sua respiração e a gravidade da crise imediatamente.
 
 ### 11. Áudio 09 — Dor lombar
 
-**Arquivo:** `a9.wav`  
+**Arquivo:** `caso-09-lombalgia.wav`  
 **Cenário:** Dor lombar após esforço físico, sem irradiação relatada ou sinais de alerta descritos.
 
 #### Transcrição-gabarito
@@ -428,7 +428,7 @@ MÉDICO: Vou examinar sua coluna e avaliar os sinais de alerta antes de orientar
 
 ### 12. Áudio 10 — Suspeita de anemia
 
-**Arquivo:** `a10.wav`  
+**Arquivo:** `caso-10-anemia.wav`  
 **Cenário:** Cansaço, tontura ao levantar e hemoglobina relatada como baixa.
 
 #### Transcrição-gabarito
@@ -472,16 +472,16 @@ MÉDICO: Vamos revisar o hemograma e investigar a causa desses sintomas antes de
 
 ## 13. Resumo dos dez casos
 
-1. `a1.wav` — Suspeita de dengue: febre, dor no corpo, dor atrás dos olhos e redução da urina.
-2. `a2.wav` — Infecção respiratória: tosse há cinco dias, catarro e febre recente.
-3. `a3.wav` — Hipertensão: pressão relatada de 16 por 10 e esquecimento de doses de losartana.
-4. `a4.wav` — Diabetes: glicemia de jejum de 186 mg/dL, metformina e sintomas associados.
-5. `a5.wav` — Infecção urinária: ardência ao urinar e frequência urinária aumentada.
-6. `a6.wav` — Cefaleia: dor pulsátil à direita e sensibilidade à luz.
-7. `a7.wav` — Gastroenterite: quatro episódios de diarreia, dois vômitos e temperatura de 37,8 °C.
-8. `a8.wav` — Asma: chiado após exposição à poeira e alívio pouco duradouro com salbutamol.
-9. `a9.wav` — Lombalgia: dor após esforço, sem irradiação ou sinais de alerta relatados.
-10. `a10.wav` — Suspeita de anemia: cansaço, tontura ao levantar e hemoglobina relatada de 9,8.
+1. `caso-01-dengue.wav` — Suspeita de dengue: febre, dor no corpo, dor atrás dos olhos e redução da urina.
+2. `caso-02-infeccao-respiratoria.wav` — Infecção respiratória: tosse há cinco dias, catarro e febre recente.
+3. `caso-03-hipertensao.wav` — Hipertensão: pressão relatada de 16 por 10 e esquecimento de doses de losartana.
+4. `caso-04-diabetes.wav` — Diabetes: glicemia de jejum de 186 mg/dL, metformina e sintomas associados.
+5. `caso-05-infeccao-urinaria.wav` — Infecção urinária: ardência ao urinar e frequência urinária aumentada.
+6. `caso-06-cefaleia.wav` — Cefaleia: dor pulsátil à direita e sensibilidade à luz.
+7. `caso-07-gastroenterite.wav` — Gastroenterite: quatro episódios de diarreia, dois vômitos e temperatura de 37,8 °C.
+8. `caso-08-asma.wav` — Asma: chiado após exposição à poeira e alívio pouco duradouro com salbutamol.
+9. `caso-09-lombalgia.wav` — Lombalgia: dor após esforço, sem irradiação ou sinais de alerta relatados.
+10. `caso-10-anemia.wav` — Suspeita de anemia: cansaço, tontura ao levantar e hemoglobina relatada de 9,8.
 
 ## 14. Recomendações para a avaliação da B37
 
@@ -535,5 +535,3 @@ Para uma avaliação quantitativa rigorosa, recomenda-se definir previamente os 
 - Transcrições de referência organizadas neste documento.
 - Informações clínicas e referências SOAP definidas para os dez cenários.
 - Comparação automatizada das transcrições e validação dos resultados ainda dependem da execução dos testes e da integração com o fluxo de avaliação do projeto.
-
-**Observação final:** os nomes `a1.wav` a `a10.wav` são os nomes dos arquivos considerados no contexto do projeto. Caso os arquivos do repositório utilizem nomes como `caso-01-dengue.wav`, ajuste os nomes nesta documentação para corresponder aos arquivos efetivamente versionados.
