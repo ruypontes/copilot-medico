@@ -57,7 +57,7 @@ cp API/.env.example API/.env
 
 Preencha em `API/.env` no mínimo `GEMINI_API_KEY`, `AUTH_SECRET_KEY` e
 `AUTH_BOOTSTRAP_EMAIL` / `AUTH_BOOTSTRAP_PASSWORD`. Sem `AUTH_SECRET_KEY` toda
-rota autenticada responde 500; sem `AUTH_BOOTSTRAP_*` nenhum administrador é
+rota autenticada responde 401; sem `AUTH_BOOTSTRAP_*` nenhum administrador é
 criado e ninguém consegue entrar (D‑22/D‑23). O arquivo está no `.gitignore`.
 
 ```bash

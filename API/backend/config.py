@@ -35,8 +35,8 @@ class Settings(BaseSettings):
     auth_login_lockout_attempts: int = 5
     auth_login_lockout_seconds: int = 900
 
-    # Use "*" em desenvolvimento; em producao prefira lista separada por virgulas.
-    cors_origins: str = "*"
+    # Origens locais explicitas; configure CORS_ORIGINS no ambiente de producao.
+    cors_origins: str = "http://localhost:8080,http://localhost:5174"
 
     # Partes (chunks) de audio da gravacao (B30). Ficam em disco so ate a
     # transcricao; vazio = pasta temporaria do sistema.

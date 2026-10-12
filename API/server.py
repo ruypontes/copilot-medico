@@ -60,9 +60,16 @@ from backend.audio_service import Diarizador
 
 def get_cors_origins():
     configured_origins = settings.cors_origins.strip()
+
+    # Configuracao vazia ou "*" nao deve liberar todas as origens.
     if not configured_origins or configured_origins == "*":
-        return "*"
-    return [origin.strip() for origin in configured_origins.split(",") if origin.strip()]
+        return []
+
+    return [
+        origin.strip().rstrip("/")
+        for origin in configured_origins.split(",")
+        if origin.strip()
+    ]
 
 
 app = Flask(__name__)
