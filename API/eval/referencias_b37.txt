@@ -1,0 +1,537 @@
+# B37 — Gabaritos de Transcrição e Referências para Avaliação
+## Copilot Médico — Sprint 3
+
+### 1. Objetivo
+
+Este documento reúne os gabaritos de referência dos dez áudios sintéticos produzidos para a atividade B37 do projeto Copilot Médico.
+
+Os áudios representam conversas fictícias entre médico e paciente, em português brasileiro, e podem ser utilizados para avaliar:
+
+- Transcrição automática de áudio (Speech-to-Text).
+- Identificação e separação das falas do médico e do paciente.
+- Extração de informações clínicas relevantes.
+- Identificação de sintomas presentes e ausentes.
+- Reconhecimento de medicamentos, doses, frequências, datas, horários e valores numéricos.
+- Geração de registros clínicos estruturados no formato SOAP.
+- Preservação das informações relatadas, sem inventar dados ausentes.
+
+### 2. Premissas
+
+Os arquivos de áudio são considerados correspondentes exatamente aos roteiros originais fornecidos para gravação.
+
+As transcrições abaixo constituem o texto de referência esperado. Como os áudios não foram inspecionados individualmente nesta etapa, eventuais diferenças entre o roteiro e o arquivo gravado ainda deverão ser verificadas quando houver necessidade de validação rigorosa.
+
+Os casos são inteiramente fictícios e não representam atendimentos reais.
+
+### 3. Áudio 01 — Suspeita de dengue
+
+**Arquivo:** `caso-01-dengue.wav`  
+**Cenário:** Febre, dores no corpo e dor retro-orbitária.
+
+#### Transcrição-gabarito
+
+MÉDICO: Bom dia. O que está sentindo?
+
+PACIENTE: Doutor, estou com febre há três dias, dor no corpo e muita dor atrás dos olhos.
+
+MÉDICO: Teve vômitos, sangramento ou dor forte na barriga?
+
+PACIENTE: Não tive sangramento. Senti enjoo ontem, mas não vomitei. Minha barriga não está doendo.
+
+MÉDICO: Está conseguindo beber água e urinar normalmente?
+
+PACIENTE: Estou bebendo água, mas hoje urinei menos que de costume.
+
+MÉDICO: Certo. Vamos avaliar sua hidratação e verificar sinais de alerta. Se tiver dor abdominal intensa, vômitos persistentes, sangramento ou tontura importante, procure atendimento imediatamente.
+
+#### Informações clínicas de referência
+
+- Febre há três dias.
+- Dor no corpo.
+- Dor atrás dos olhos.
+- Náusea no dia anterior.
+- Nega vômitos.
+- Nega sangramento.
+- Nega dor abdominal.
+- Refere ingestão de água.
+- Relata redução da frequência ou quantidade de urina em relação ao habitual.
+- Médico planeja avaliar hidratação e sinais de alerta.
+- Orientação para procurar atendimento diante de sinais de alerta.
+
+#### SOAP de referência
+
+**S — Subjetivo:** Paciente relata febre há três dias, dor no corpo, dor atrás dos olhos e náusea no dia anterior. Nega vômitos, sangramento e dor abdominal. Refere estar bebendo água, mas urinando menos que o habitual.
+
+**O — Objetivo:** Não foram fornecidos sinais vitais medidos, exame físico ou resultados laboratoriais no diálogo.
+
+**A — Avaliação:** Quadro febril agudo com sintomas compatíveis com possível arbovirose, incluindo suspeita de dengue. A classificação clínica depende de avaliação presencial e investigação de sinais de alarme.
+
+**P — Plano:** Avaliar hidratação e sinais de alerta. Orientar procura imediata de atendimento se houver dor abdominal intensa, vômitos persistentes, sangramento ou tontura importante.
+
+---
+
+### 4. Áudio 02 — Infecção respiratória
+
+**Arquivo:** `caso-02-infeccao-respiratoria.wav`  
+**Cenário:** Tosse há cinco dias, alteração do tipo de secreção e febre recente.
+
+#### Transcrição-gabarito
+
+MÉDICO: Há quanto tempo está tossindo?
+
+PACIENTE: Faz cinco dias. No começo era tosse seca, mas agora sai um pouco de catarro.
+
+MÉDICO: Teve febre ou falta de ar?
+
+PACIENTE: Tive febre de trinta e oito graus anteontem. Falta de ar, não.
+
+MÉDICO: Tem alguma doença crônica ou alergia a medicamentos?
+
+PACIENTE: Tenho rinite. Não conheço nenhuma alergia a remédios.
+
+MÉDICO: Certo. Vou examinar sua respiração e avaliar a necessidade de exames conforme os achados.
+
+#### Informações clínicas de referência
+
+- Tosse há cinco dias.
+- Inicialmente, tosse seca.
+- Atualmente, tosse com pequena quantidade de catarro.
+- Febre de 38 °C anteontem.
+- Nega falta de ar.
+- Relata rinite.
+- Não conhece alergias a medicamentos.
+- Médico planeja examinar a respiração e avaliar necessidade de exames.
+
+#### SOAP de referência
+
+**S — Subjetivo:** Paciente relata tosse há cinco dias, inicialmente seca e atualmente com pequena quantidade de catarro. Refere febre de 38 °C anteontem. Nega falta de ar. Informa histórico de rinite e ausência de alergias medicamentosas conhecidas.
+
+**O — Objetivo:** Temperatura de 38 °C relatada pelo paciente, referente a anteontem. Não foram fornecidos sinais vitais atuais ou achados de exame físico.
+
+**A — Avaliação:** Síndrome respiratória aguda a esclarecer. As informações disponíveis não permitem definir etiologia viral, bacteriana ou outro diagnóstico específico.
+
+**P — Plano:** Realizar exame respiratório e avaliar necessidade de exames complementares de acordo com os achados clínicos.
+
+---
+
+### 5. Áudio 03 — Hipertensão arterial
+
+**Arquivo:** `caso-03-hipertensao.wav`  
+**Cenário:** Pressão arterial elevada em medida realizada na farmácia e esquecimento de doses.
+
+#### Transcrição-gabarito
+
+MÉDICO: Veio para uma consulta de rotina?
+
+PACIENTE: Sim. Medi minha pressão na farmácia e deu dezesseis por dez.
+
+MÉDICO: Está tomando algum medicamento para pressão?
+
+PACIENTE: Tomo losartana de cinquenta miligramas, uma vez por dia. Esqueci algumas doses esta semana.
+
+MÉDICO: Sentiu dor no peito, falta de ar ou dor de cabeça muito forte?
+
+PACIENTE: Não. Estou me sentindo bem.
+
+MÉDICO: Vamos repetir a medida em condições adequadas e revisar o uso do medicamento antes de decidir qualquer ajuste.
+
+#### Informações clínicas de referência
+
+- Medida de pressão relatada como 16 por 10, convencionalmente interpretada como 160/100 mmHg.
+- Medida realizada na farmácia.
+- Uso de losartana 50 mg.
+- Frequência prescrita relatada: uma vez ao dia.
+- Esquecimento de algumas doses durante a semana.
+- Nega dor no peito.
+- Nega falta de ar.
+- Nega dor de cabeça muito forte.
+- Refere estar se sentindo bem.
+- Médico planeja repetir a medida e revisar o uso do medicamento.
+
+#### SOAP de referência
+
+**S — Subjetivo:** Paciente relata medida de pressão arterial de 16 por 10 em farmácia. Informa uso de losartana 50 mg uma vez ao dia, com esquecimento de algumas doses na semana. Nega dor torácica, falta de ar e cefaleia muito forte. Refere estar bem.
+
+**O — Objetivo:** Valor de pressão arterial relatado pelo paciente: 16 por 10. Não há confirmação por medida realizada durante a consulta.
+
+**A — Avaliação:** Relato de pressão arterial elevada em paciente que utiliza anti-hipertensivo e apresenta falhas recentes na adesão ao tratamento.
+
+**P — Plano:** Repetir a aferição em condições adequadas e revisar o uso do medicamento antes de decidir qualquer ajuste terapêutico.
+
+---
+
+### 6. Áudio 04 — Diabetes e glicemia elevada
+
+**Arquivo:** `caso-04-diabetes.wav`  
+**Cenário:** Glicemia de jejum elevada, uso de metformina e sintomas associados.
+
+#### Transcrição-gabarito
+
+MÉDICO: Como estão suas medidas de glicose?
+
+PACIENTE: Minha glicose em jejum deu cento e oitenta e seis ontem.
+
+MÉDICO: Estava em jejum havia pelo menos oito horas?
+
+PACIENTE: Sim. Eu tinha jantado às oito da noite e medi às sete da manhã.
+
+MÉDICO: Está tomando metformina?
+
+PACIENTE: Sim, quinhentos miligramas duas vezes ao dia. Às vezes sinto muita sede e vou ao banheiro várias vezes.
+
+MÉDICO: Vamos revisar seus exames, os sintomas e o tratamento para definir a próxima conduta.
+
+#### Informações clínicas de referência
+
+- Glicemia de jejum relatada: 186 mg/dL.
+- Medida realizada no dia anterior.
+- Última refeição às 20h.
+- Medida da glicose às 7h.
+- Intervalo informado entre refeição e exame: aproximadamente 11 horas.
+- Uso de metformina 500 mg duas vezes ao dia.
+- Relata sede excessiva em algumas ocasiões.
+- Relata aumento da frequência urinária em algumas ocasiões.
+- Médico planeja revisar exames, sintomas e tratamento.
+
+#### SOAP de referência
+
+**S — Subjetivo:** Paciente relata glicemia de jejum de 186 mg/dL no dia anterior. Informa ter jantado às 20h e realizado a medida às 7h. Refere uso de metformina 500 mg duas vezes ao dia, sede excessiva ocasional e aumento da frequência urinária.
+
+**O — Objetivo:** Glicemia de 186 mg/dL relatada pelo paciente. O diálogo não especifica método de medição nem apresenta exames adicionais.
+
+**A — Avaliação:** Glicemia elevada em contexto de possível diabetes ou diabetes em acompanhamento, com relato de sede excessiva e aumento da frequência urinária. A interpretação depende do histórico e da avaliação clínica.
+
+**P — Plano:** Revisar exames, sintomas e tratamento para definir a conduta.
+
+---
+
+### 7. Áudio 05 — Infecção urinária
+
+**Arquivo:** `caso-05-infeccao-urinaria.wav`  
+**Cenário:** Ardência ao urinar, aumento da frequência urinária e desconforto abdominal inferior.
+
+#### Transcrição-gabarito
+
+MÉDICO: Qual é o principal incômodo?
+
+PACIENTE: Sinto ardência quando urino e vontade de ir ao banheiro toda hora, desde anteontem.
+
+MÉDICO: Teve febre, calafrios ou dor nas costas?
+
+PACIENTE: Não tive febre. Sinto um desconforto leve na parte de baixo da barriga, mas não nas costas.
+
+MÉDICO: Notou sangue na urina?
+
+PACIENTE: Não notei.
+
+MÉDICO: Vamos avaliar os sintomas e verificar se é necessário fazer um exame de urina antes de definir o tratamento.
+
+#### Informações clínicas de referência
+
+- Ardência ao urinar desde anteontem.
+- Aumento da frequência ou urgência urinária.
+- Nega febre.
+- Desconforto leve na parte inferior do abdome.
+- Nega dor nas costas.
+- Nega sangue visível na urina.
+- Médico considera avaliar a necessidade de exame de urina.
+
+#### SOAP de referência
+
+**S — Subjetivo:** Paciente relata ardência ao urinar e vontade frequente de ir ao banheiro desde anteontem. Nega febre. Refere desconforto leve na parte inferior do abdome, sem dor nas costas. Nega sangue visível na urina.
+
+**O — Objetivo:** Não foram fornecidos exame físico, exame de urina ou outros dados objetivos.
+
+**A — Avaliação:** Sintomas urinários compatíveis com possível infecção do trato urinário inferior, ainda sem confirmação laboratorial.
+
+**P — Plano:** Avaliar os sintomas e verificar a necessidade de exame de urina antes de definir o tratamento.
+
+---
+
+### 8. Áudio 06 — Dor de cabeça
+
+**Arquivo:** `caso-06-cefaleia.wav`  
+**Cenário:** Dor de cabeça pulsátil, unilateral e associada à sensibilidade à luz.
+
+#### Transcrição-gabarito
+
+MÉDICO: Pode descrever sua dor de cabeça?
+
+PACIENTE: É uma dor pulsando do lado direito, começou ontem à tarde e piora quando caminho.
+
+MÉDICO: Teve alteração na visão, febre ou fraqueza em algum braço ou perna?
+
+PACIENTE: Fiquei incomodado com a luz, mas não tive febre nem fraqueza.
+
+MÉDICO: Já sentiu uma dor parecida antes?
+
+PACIENTE: Sim, umas três vezes nos últimos seis meses.
+
+MÉDICO: Vou avaliar as características da dor e fazer um exame neurológico para verificar se há sinais de alerta.
+
+#### Informações clínicas de referência
+
+- Dor de cabeça pulsátil.
+- Localização no lado direito.
+- Início na tarde do dia anterior.
+- Piora ao caminhar.
+- Sensibilidade à luz.
+- Nega febre.
+- Nega fraqueza em braço ou perna.
+- Relata aproximadamente três episódios semelhantes nos últimos seis meses.
+- Médico planeja avaliar a dor e realizar exame neurológico.
+
+#### SOAP de referência
+
+**S — Subjetivo:** Paciente relata dor de cabeça pulsátil do lado direito, iniciada na tarde do dia anterior e agravada ao caminhar. Refere incômodo com a luz. Nega febre e fraqueza em membros. Informa cerca de três episódios semelhantes nos últimos seis meses.
+
+**O — Objetivo:** Não foram fornecidos sinais vitais nem resultados de exame neurológico.
+
+**A — Avaliação:** Cefaleia unilateral pulsátil com sensibilidade à luz e episódios prévios. A causa não pode ser confirmada apenas pelo diálogo, sendo necessária avaliação clínica e investigação de sinais de alerta.
+
+**P — Plano:** Avaliar as características da dor e realizar exame neurológico para verificar a presença de sinais de alerta.
+
+---
+
+### 9. Áudio 07 — Gastroenterite
+
+**Arquivo:** `caso-07-gastroenterite.wav`  
+**Cenário:** Diarreia, vômitos e dificuldade para manter a ingestão de líquidos.
+
+#### Transcrição-gabarito
+
+MÉDICO: Quando começaram os sintomas?
+
+PACIENTE: Hoje de madrugada. Já tive quatro episódios de diarreia e vomitei duas vezes.
+
+MÉDICO: Conseguiu beber líquidos e manter a hidratação?
+
+PACIENTE: Pouca coisa. Quando bebo muito de uma vez, sinto vontade de vomitar.
+
+MÉDICO: Observou sangue nas fezes ou teve febre?
+
+PACIENTE: Não vi sangue. Medi a temperatura e estava em trinta e sete vírgula oito.
+
+MÉDICO: Vamos avaliar sua hidratação e orientar a reposição de líquidos conforme seu estado clínico.
+
+#### Informações clínicas de referência
+
+- Início dos sintomas na madrugada do dia da conversa.
+- Quatro episódios de diarreia.
+- Dois episódios de vômito.
+- Ingestão reduzida de líquidos.
+- Náusea ou vontade de vomitar ao beber grandes volumes de uma só vez.
+- Nega sangue visível nas fezes.
+- Temperatura relatada: 37,8 °C.
+- Médico planeja avaliar a hidratação e orientar reposição de líquidos.
+
+#### SOAP de referência
+
+**S — Subjetivo:** Paciente relata início dos sintomas na madrugada, com quatro episódios de diarreia e dois de vômito. Refere dificuldade para ingerir líquidos em grandes volumes. Nega sangue visível nas fezes.
+
+**O — Objetivo:** Temperatura de 37,8 °C relatada pelo paciente. Não há avaliação objetiva do estado de hidratação nem outros sinais vitais disponíveis.
+
+**A — Avaliação:** Quadro gastrointestinal agudo com diarreia e vômitos, acompanhado de ingestão reduzida de líquidos e possível risco de desidratação.
+
+**P — Plano:** Avaliar o estado de hidratação e orientar reposição de líquidos conforme a condição clínica.
+
+---
+
+### 10. Áudio 08 — Asma e chiado no peito
+
+**Arquivo:** `caso-08-asma.wav`  
+**Cenário:** Piora da respiração após exposição à poeira e alívio pouco duradouro com salbutamol.
+
+#### Transcrição-gabarito
+
+MÉDICO: O que aconteceu antes de começar a falta de ar?
+
+PACIENTE: Limpei a casa ontem, levantei muita poeira e comecei a chiar no peito à noite.
+
+MÉDICO: Tem diagnóstico de asma? Usa alguma bombinha?
+
+PACIENTE: Tenho asma desde criança. Uso salbutamol quando preciso.
+
+MÉDICO: Quantas vezes precisou usar hoje?
+
+PACIENTE: Usei três vezes desde a manhã, mas o alívio está durando pouco.
+
+MÉDICO: Vamos avaliar sua respiração e a gravidade da crise imediatamente.
+
+#### Informações clínicas de referência
+
+- Limpeza da casa no dia anterior.
+- Exposição a grande quantidade de poeira.
+- Início de chiado no peito à noite.
+- Diagnóstico de asma desde a infância.
+- Uso de salbutamol quando necessário.
+- Três utilizações do medicamento desde a manhã do dia da conversa.
+- Alívio pouco duradouro.
+- Médico planeja avaliar imediatamente a respiração e a gravidade do quadro.
+
+#### SOAP de referência
+
+**S — Subjetivo:** Paciente com histórico de asma desde a infância relata chiado no peito após exposição à poeira durante a limpeza da casa. Informa uso de salbutamol três vezes desde a manhã, com alívio pouco duradouro.
+
+**O — Objetivo:** Não foram fornecidos frequência respiratória, saturação de oxigênio, ausculta pulmonar ou outros dados objetivos.
+
+**A — Avaliação:** Piora de sintomas respiratórios em paciente com asma, possivelmente desencadeada por exposição à poeira. A gravidade precisa ser avaliada presencialmente.
+
+**P — Plano:** Avaliar imediatamente a respiração e a gravidade do quadro.
+
+---
+
+### 11. Áudio 09 — Dor lombar
+
+**Arquivo:** `caso-09-lombalgia.wav`  
+**Cenário:** Dor lombar após esforço físico, sem irradiação relatada ou sinais de alerta descritos.
+
+#### Transcrição-gabarito
+
+MÉDICO: Onde exatamente dói?
+
+PACIENTE: Na parte de baixo das costas, mais do lado esquerdo. Começou depois que carreguei umas caixas há dois dias.
+
+MÉDICO: A dor desce para alguma perna?
+
+PACIENTE: Não. Fica mais nas costas e piora quando me abaixo.
+
+MÉDICO: Teve perda de força, dificuldade para urinar ou perda de controle da urina?
+
+PACIENTE: Não, nada disso.
+
+MÉDICO: Vou examinar sua coluna e avaliar os sinais de alerta antes de orientar o tratamento.
+
+#### Informações clínicas de referência
+
+- Dor na parte inferior das costas.
+- Predomínio no lado esquerdo.
+- Início após carregar caixas há dois dias.
+- Nega irradiação da dor para as pernas.
+- Piora ao se abaixar.
+- Nega perda de força.
+- Nega dificuldade para urinar.
+- Nega perda de controle da urina.
+- Médico planeja examinar a coluna e avaliar sinais de alerta.
+
+#### SOAP de referência
+
+**S — Subjetivo:** Paciente relata dor lombar predominante à esquerda, iniciada após carregar caixas há dois dias. Nega irradiação para as pernas. Refere piora ao se abaixar. Nega perda de força, dificuldade para urinar e perda de controle da urina.
+
+**O — Objetivo:** Não foram fornecidos achados de exame físico, avaliação neurológica ou outros dados objetivos.
+
+**A — Avaliação:** Dor lombar aguda associada a esforço físico, sem sinais de alerta descritos no diálogo. A causa específica não pode ser confirmada sem exame clínico.
+
+**P — Plano:** Examinar a coluna e avaliar sinais de alerta antes de orientar o tratamento.
+
+---
+
+### 12. Áudio 10 — Suspeita de anemia
+
+**Arquivo:** `caso-10-anemia.wav`  
+**Cenário:** Cansaço, tontura ao levantar e hemoglobina relatada como baixa.
+
+#### Transcrição-gabarito
+
+MÉDICO: O que tem sentido nos últimos dias?
+
+PACIENTE: Cansaço, tontura quando me levanto e falta de disposição para trabalhar.
+
+MÉDICO: Fez algum exame de sangue recentemente?
+
+PACIENTE: Fiz há uma semana. A hemoglobina deu nove vírgula oito.
+
+MÉDICO: Notou sangramento ou mudança na cor das fezes?
+
+PACIENTE: Não notei sangramento. Minha alimentação também anda meio irregular.
+
+MÉDICO: Vamos revisar o hemograma e investigar a causa desses sintomas antes de definir o tratamento.
+
+#### Informações clínicas de referência
+
+- Cansaço nos últimos dias.
+- Tontura ao levantar.
+- Falta de disposição para trabalhar.
+- Exame de sangue realizado há uma semana.
+- Hemoglobina relatada como 9,8.
+- Nega sangramento percebido.
+- Relata alimentação irregular.
+- Médico planeja revisar o hemograma e investigar a causa dos sintomas.
+
+#### SOAP de referência
+
+**S — Subjetivo:** Paciente relata cansaço, tontura ao levantar e falta de disposição para trabalhar. Informa exame de sangue realizado há uma semana, com hemoglobina de 9,8. Nega sangramento percebido e refere alimentação irregular.
+
+**O — Objetivo:** Hemoglobina de 9,8 relatada pelo paciente. A unidade, o hemograma completo e os demais parâmetros laboratoriais não foram fornecidos no diálogo.
+
+**A — Avaliação:** Sintomas que podem estar associados à anemia, com relato de hemoglobina reduzida. A causa não pode ser determinada apenas pelas informações disponíveis.
+
+**P — Plano:** Revisar o hemograma e investigar a causa dos sintomas antes de definir o tratamento.
+
+---
+
+## 13. Resumo dos dez casos
+
+1. `caso-01-dengue.wav` — Suspeita de dengue: febre, dor no corpo, dor atrás dos olhos e redução da urina.
+2. `caso-02-infeccao-respiratoria.wav` — Infecção respiratória: tosse há cinco dias, catarro e febre recente.
+3. `caso-03-hipertensao.wav` — Hipertensão: pressão relatada de 16 por 10 e esquecimento de doses de losartana.
+4. `caso-04-diabetes.wav` — Diabetes: glicemia de jejum de 186 mg/dL, metformina e sintomas associados.
+5. `caso-05-infeccao-urinaria.wav` — Infecção urinária: ardência ao urinar e frequência urinária aumentada.
+6. `caso-06-cefaleia.wav` — Cefaleia: dor pulsátil à direita e sensibilidade à luz.
+7. `caso-07-gastroenterite.wav` — Gastroenterite: quatro episódios de diarreia, dois vômitos e temperatura de 37,8 °C.
+8. `caso-08-asma.wav` — Asma: chiado após exposição à poeira e alívio pouco duradouro com salbutamol.
+9. `caso-09-lombalgia.wav` — Lombalgia: dor após esforço, sem irradiação ou sinais de alerta relatados.
+10. `caso-10-anemia.wav` — Suspeita de anemia: cansaço, tontura ao levantar e hemoglobina relatada de 9,8.
+
+## 14. Recomendações para a avaliação da B37
+
+### Transcrição automática
+
+Comparar o texto produzido pelo sistema com a transcrição-gabarito de cada áudio.
+
+Verificar especialmente:
+
+- Palavras omitidas ou substituídas.
+- Separação entre médico e paciente.
+- Números falados, doses e frequências.
+- Sintomas negados, como “não tive febre” ou “não notei sangue”.
+- Expressões temporais, como “há três dias” e “anteontem”.
+- Termos médicos e nomes de medicamentos.
+
+### Extração de informações clínicas
+
+Conferir se o sistema preserva os dados clinicamente relevantes sem alterar seu significado.
+
+Exemplos de erros importantes:
+
+- Converter “nega falta de ar” em “apresenta falta de ar”.
+- Transformar “losartana de cinquenta miligramas” em outra dose.
+- Confundir a hemoglobina de 9,8 com a glicemia de 186.
+- Interpretar um valor relatado pelo paciente como uma medição feita durante a consulta.
+- Inventar sinais vitais, achados físicos, diagnósticos confirmados ou resultados laboratoriais ausentes.
+
+### Geração de SOAP
+
+Avaliar se as informações foram distribuídas adequadamente:
+
+- **S — Subjetivo:** sintomas e informações relatadas pelo paciente.
+- **O — Objetivo:** medidas, exames e achados efetivamente disponíveis.
+- **A — Avaliação:** interpretação clínica compatível com as informações, mantendo a incerteza quando necessário.
+- **P — Plano:** condutas ou próximos passos expressamente mencionados no diálogo, sem inventar decisões médicas.
+
+### Limitações conhecidas
+
+Os registros SOAP deste documento são gabaritos de referência elaborados a partir dos roteiros. Eles não substituem validação clínica e não devem ser tratados como diagnósticos definitivos.
+
+Os diálogos contêm poucas informações objetivas. Portanto, não se deve penalizar um sistema por não apresentar resultados de exames, sinais vitais ou achados de exame físico que não foram fornecidos. Por outro lado, deve-se considerar erro a invenção desses dados.
+
+Para uma avaliação quantitativa rigorosa, recomenda-se definir previamente os critérios de comparação da transcrição, da extração de dados e da estrutura SOAP.
+
+## 15. Situação da atividade
+
+- Dez roteiros de conversas clínicas sintéticas definidos.
+- Dez arquivos WAV adicionados ao ramo `test/B37-audio-sem-lfs`.
+- Arquivos adicionados diretamente ao Git, sem Git LFS, para contornar o limite de armazenamento do LFS.
+- Transcrições de referência organizadas neste documento.
+- Informações clínicas e referências SOAP definidas para os dez cenários.
+- Comparação automatizada das transcrições e validação dos resultados ainda dependem da execução dos testes e da integração com o fluxo de avaliação do projeto.
