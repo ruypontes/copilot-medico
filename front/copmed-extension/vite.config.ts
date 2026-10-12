@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
@@ -13,6 +13,15 @@ export default defineConfig({
         offscreen: 'offscreen.html',
         microfone: 'microfone.html',
       },
+    },
+  },
+  test: {
+    // Os testes valem para os limites reais (120 min, partes de 5 min). O Vite também lê o
+    // .env.local durante os testes: sem isto, quem encurta os prazos ali para o teste manual
+    // (VITE_RECORDING_*) veria a suíte falhar.
+    env: {
+      VITE_RECORDING_CHUNK_SECONDS: '',
+      VITE_RECORDING_MAX_SECONDS: '',
     },
   },
 })
