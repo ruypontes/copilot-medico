@@ -1,13 +1,25 @@
-"""Tabela `consulta` e o que pertence a ela: `mensagem`, `documento_soap`
-e `consentimento`.
+"""Tabela `consulta` e o que pertence a ela: `mensagem`, `documento_soap`,
+`consentimento`, `mapa_anonimizacao` e `parte_audio`.
 
-Apagar uma consulta apaga em cascata as mensagens, os documentos SOAP e o
-consentimento (ON DELETE CASCADE no banco).
+Apagar uma consulta apaga em cascata as mensagens, os documentos SOAP, o
+consentimento e as partes de audio pendentes (ON DELETE CASCADE no banco).
 """
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, LargeBinary, String, Text, Uuid
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CriadoEmMixin, UuidPkMixin, enum_column, utcnow
@@ -98,3 +110,29 @@ class MapaAnonimizacaoConsulta(Base):
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
+
+
+class ParteAudio(UuidPkMixin, CriadoEmMixin, Base):
+    """Parte (chunk) de audio de uma gravacao, aguardando a transcricao
+    (B30 / US017-CA003).
+
+    O audio NAO fica no banco: `caminho` aponta para um arquivo temporario do
+    servidor, apagado junto com a linha quando a gravacao e transcrita
+    (US017-CA007). `(consulta, gravacao, seq)` e unico: reenviar a mesma parte
+    substitui a anterior em vez de duplicar.
+    """
+
+    __tablename__ = "parte_audio"
+    __table_args__ = (UniqueConstraint("consulta_id", "gravacao_id", "seq"),)
+
+    consulta_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("consulta.id", ondelete="CASCADE"), nullable=False
+    )
+    # Gerado pela extensao a cada gravacao: uma consulta pode ter varias.
+    gravacao_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Posicao da parte na gravacao, a partir de 1.
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    caminho: Mapped[str] = mapped_column(Text, nullable=False)
+    tamanho_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Lida do cabecalho do WAV no servidor, nao informada pelo cliente.
+    duracao_s: Mapped[float] = mapped_column(Float, nullable=False)

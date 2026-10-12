@@ -1,5 +1,6 @@
 import os
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta, timezone
 
 from flask import Flask, g, request, jsonify
 from flask_cors import CORS
@@ -7,6 +8,7 @@ import tempfile
 import speech_recognition as sr
 
 # Assuming these imports are correct and available
+from backend import audio_chunks
 from backend import gemini_connection
 from backend import pdf_reader
 from backend import pep_import
@@ -41,6 +43,7 @@ from repositories import (
     MedicoNaoEncontrado,
     MensagemRepository,
     PacienteRepository,
+    ParteAudioRepository,
     TranscricaoRepository,
     sessao,
 )
@@ -87,6 +90,10 @@ def _transcricoes():
 
 def _mapas_anonimizacao():
     return MapaAnonimizacaoRepository(sessao.obter_sessao())
+
+
+def _partes_audio():
+    return ParteAudioRepository(sessao.obter_sessao())
 
 
 def _token_da_requisicao():
@@ -503,6 +510,42 @@ def reject_doctor_request_api(user_id):
     }), 200
 
 
+# Respostas do transcritor para silencio/ruido: nao viram transcricao salva.
+FRASES_DE_AUDIO_INVALIDO = (
+    "Não foi possível entender o áudio",
+    "Erro na API de reconhecimento",
+)
+
+
+def _transcrever_arquivo(caminho, duracao=0.0):
+    """Transcreve um arquivo WAV e devolve (texto, turnos, duracao_s).
+
+    Tenta a diarizacao (Vosk + Google) quando os modelos estao carregados e
+    cai na transcricao simples, sem turnos, se ela falhar ou nao existir.
+    Usado pela rota legada (audio inteiro) e pela transcricao por partes (B30).
+    """
+    if audio_processor:
+        try:
+            print("[TRANSCRIÇÃO] Iniciando Diarização (Vosk + Google)...")
+            result = audio_processor.processar_audio(caminho)
+            turnos = result['dialogue']  # Estrutura JSON rica (Médico/Paciente)
+            # Sem duração informada, usa o fim do último segmento como aproximação
+            if duracao == 0 and turnos:
+                duracao = turnos[-1].get('end', 0)
+            print("[TRANSCRIÇÃO] Diarização concluída com sucesso.")
+            return result['full_text'], turnos, duracao
+        except Exception as e:
+            print(f"❌ Erro na Diarização: {e}. Tentando fallback simples...")
+
+    print("[TRANSCRIÇÃO] Usando Transcritor Simples (Legacy)...")
+    transcritor = TranscritorVoz(idioma="pt-BR")
+    with sr.AudioFile(caminho) as source:
+        audio_data = transcritor.reconhecedor.record(source)
+        if duracao == 0:
+            duracao = len(audio_data.frame_data) / audio_data.sample_rate / audio_data.sample_width
+        return transcritor.transcrever(audio_data), None, duracao
+
+
 @app.route('/api/transcribe_audio', methods=['POST'])
 @roles_required("administrador", "medico")
 def transcribe_audio_route():
@@ -545,57 +588,11 @@ def transcribe_audio_route():
             audio_file.save(tmp_path)
             print(f"[TRANSCRIÇÃO] Áudio salvo em: {tmp_path}")
 
-        # Variáveis de resultado
-        texto_final = ""
-        dialogue_structure = None
-        final_duration = duration_input
-
-        # 3. Processamento (Tentativa de Diarização Inteligente)
-        processed_successfully = False
-
-        if audio_processor:
-            try:
-                print("[TRANSCRIÇÃO] Iniciando Diarização (Vosk + Google)...")
-                # Aqui chamamos sua classe Diarizador
-                result = audio_processor.processar_audio(tmp_path)
-
-                texto_final = result['full_text']
-                dialogue_structure = result['dialogue']  # Estrutura JSON rica (Médico/Paciente)
-
-                # Se a duração veio 0 do front, tentamos estimar (opcional, mas o Vosk não retorna duration total fácil)
-                if final_duration == 0 and dialogue_structure:
-                    # Pega o fim do último segmento como duração aproximada
-                    final_duration = dialogue_structure[-1].get('end', 0) if len(dialogue_structure) > 0 else 0
-
-                processed_successfully = True
-                print("[TRANSCRIÇÃO] Diarização concluída com sucesso.")
-            except Exception as e:
-                print(f"❌ Erro na Diarização: {e}. Tentando fallback simples...")
-                processed_successfully = False
-
-        # 4. Fallback (Transcrição Simples) se o Diarizador falhar ou não existir
-        if not processed_successfully:
-            print("[TRANSCRIÇÃO] Usando Transcritor Simples (Legacy)...")
-            try:
-                transcritor = TranscritorVoz(idioma="pt-BR")
-                with sr.AudioFile(tmp_path) as source:
-                    audio_data = transcritor.reconhecedor.record(source)
-                    # Calcula duração se não tiver
-                    if final_duration == 0:
-                        final_duration = len(audio_data.frame_data) / audio_data.sample_rate / audio_data.sample_width
-
-                    texto_final = transcritor.transcrever(audio_data)
-                    dialogue_structure = None  # Não tem estrutura de médico/paciente
-            except Exception as e_simple:
-                print(f"❌ Erro fatal também na transcrição simples: {e_simple}")
-                raise e_simple
+        # 3 e 4. Diarização inteligente ou, se falhar/não existir, transcrição simples
+        texto_final, dialogue_structure, final_duration = _transcrever_arquivo(tmp_path, duration_input)
 
         # 5. Validação de Erro de Áudio (Silêncio/Ruído)
-        invalid_phrases = [
-            "Não foi possível entender o áudio",
-            "Erro na API de reconhecimento"
-        ]
-        if any(phrase in texto_final for phrase in invalid_phrases):
+        if any(phrase in texto_final for phrase in FRASES_DE_AUDIO_INVALIDO):
             return jsonify({
                 "status": "success",
                 "transcription": texto_final,
@@ -634,6 +631,183 @@ def transcribe_audio_route():
         # Limpeza
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Audio em partes (B30 / US017-CA003)
+#
+# A extensao grava a consulta e envia o audio em partes de ate 5 min, cada uma
+# com a sua sequencia. As partes ficam em disco so ate a transcricao: ao parar,
+# a extensao chama /transcribe, que junta o texto na ordem e apaga o audio.
+# ---------------------------------------------------------------------------
+
+def _consulta_da_gravacao(consultation_id):
+    """(id da consulta normalizado, id do paciente, erro) das rotas de audio em partes."""
+    patient_id = _consultas().paciente_da_consulta(consultation_id)
+    if not patient_id:
+        return None, None, _json_error("Consulta nao encontrada.", 404)
+    _patient_data, access_error = require_patient_access(patient_id)
+    if access_error:
+        return None, None, access_error
+    # O id vira nome de pasta em disco: usa a forma canonica do UUID.
+    return str(uuid.UUID(consultation_id.strip())), patient_id, None
+
+
+def _apagar_partes_esquecidas():
+    """Gravacoes nunca finalizadas (navegador fechado no meio) nao podem
+    deixar audio no servidor: apaga as partes mais velhas que o prazo."""
+    limite = datetime.now(timezone.utc) - timedelta(hours=settings.audio_chunk_ttl_hours)
+    audio_chunks.apagar(_partes_audio().remover_anteriores_a(limite))
+
+
+@app.route('/api/consultations/<consultation_id>/audio/chunks', methods=['POST'])
+@roles_required("administrador", "medico")
+def upload_audio_chunk(consultation_id):
+    """Recebe uma parte (WAV de ate 5 min) da gravacao da consulta.
+
+    multipart: audio_file, recording_id (gerado pela extensao a cada gravacao)
+    e seq (1, 2, 3...). Reenviar a mesma sequencia substitui a parte anterior,
+    entao a extensao pode repetir o envio com seguranca quando ele falha.
+    Responde 202: a parte fica guardada ate POST .../transcribe.
+    """
+    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+
+    audio_file = request.files.get('audio_file')
+    if audio_file is None:
+        return _json_error("Nenhum arquivo enviado.", 400)
+
+    try:
+        recording_id = audio_chunks.validar_recording_id(request.form.get('recording_id'))
+        seq = audio_chunks.validar_seq(request.form.get('seq'))
+        arquivo = audio_chunks.salvar(audio_file, consulta_id, recording_id, seq)
+    except audio_chunks.ParteInvalida as e:
+        return _json_error(str(e), e.status)
+
+    try:
+        _apagar_partes_esquecidas()
+        parte, caminho_substituido = _partes_audio().registrar(
+            consulta_id, recording_id, seq,
+            arquivo.caminho, arquivo.tamanho_bytes, arquivo.duracao_s,
+        )
+    except Exception:
+        # Sem a linha no banco o arquivo ficaria orfao em disco.
+        audio_chunks.apagar([arquivo.caminho])
+        raise
+    if caminho_substituido:
+        audio_chunks.apagar([caminho_substituido])
+
+    recebidas = [p["seq"] for p in _partes_audio().listar(consulta_id, recording_id)]
+    # So metadados no log: nunca o conteudo do audio.
+    print(f"[AUDIO] Parte {seq} da gravacao {recording_id} recebida "
+          f"({parte['duracao_s']:.0f}s, {parte['tamanho_bytes']} bytes).")
+    return jsonify({
+        "status": "accepted",
+        "consultation_id": consulta_id,
+        "recording_id": recording_id,
+        "seq": seq,
+        "duration": parte["duracao_s"],
+        "size_bytes": parte["tamanho_bytes"],
+        "replaced": caminho_substituido is not None,
+        "received": recebidas,
+    }), 202
+
+
+@app.route('/api/consultations/<consultation_id>/transcribe', methods=['POST'])
+@roles_required("administrador", "medico")
+def transcribe_recording(consultation_id):
+    """Transcreve a gravacao enviada em partes e apaga o audio do servidor.
+
+    JSON: recording_id e, opcionalmente, total_chunks (quantas partes a
+    extensao gerou). As partes sao transcritas na ordem da sequencia. Uma parte
+    que nao chegou ou que falha na transcricao NAO derruba a consulta: o texto
+    sai com as demais e `chunks` informa o que faltou (missing/failed).
+    A resposta tem o mesmo formato de /api/transcribe_audio.
+    """
+    consulta_id, patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+    try:
+        recording_id = audio_chunks.validar_recording_id(data.get('recording_id'))
+        total_chunks = data.get('total_chunks')
+        if total_chunks is not None:
+            total_chunks = audio_chunks.validar_seq(total_chunks, campo='total_chunks')
+    except audio_chunks.ParteInvalida as e:
+        return _json_error(str(e), e.status)
+
+    partes = _partes_audio().listar(consulta_id, recording_id)
+    if not partes:
+        return _json_error("Nenhuma parte de audio recebida para esta gravacao.", 404)
+
+    trechos = []  # (texto, turnos) das partes transcritas, em ordem
+    falhas = []
+    try:
+        for parte in partes:
+            try:
+                texto, turnos, _duracao = _transcrever_arquivo(parte["caminho"], parte["duracao_s"])
+            except Exception as e:
+                print(f"[TRANSCRIÇÃO] Parte {parte['seq']} falhou: {e}")
+                falhas.append(parte["seq"])
+                continue
+            if not texto or any(frase in texto for frase in FRASES_DE_AUDIO_INVALIDO):
+                falhas.append(parte["seq"])  # silencio ou ruido
+                continue
+            trechos.append((texto, turnos))
+    finally:
+        # US017-CA007: o audio sai do servidor com ou sem sucesso na transcricao.
+        audio_chunks.apagar(_partes_audio().remover(consulta_id, recording_id))
+
+    recebidas = [parte["seq"] for parte in partes]
+    esperadas = range(1, (total_chunks or recebidas[-1]) + 1)
+    resumo = {
+        "received": recebidas,
+        "missing": [seq for seq in esperadas if seq not in recebidas],
+        "failed": falhas,
+    }
+    resposta = {
+        "status": "success",
+        "consultation_id": consulta_id,
+        "recording_id": recording_id,
+        "chunks": resumo,
+    }
+
+    if not trechos:
+        return jsonify({
+            **resposta,
+            "transcription": "Não foi possível entender o áudio.",
+            "is_error": True,
+        }), 200
+
+    texto_final = "\n".join(texto for texto, _turnos in trechos)
+    # Se alguma parte veio diarizada, as que vieram so com texto entram como um
+    # turno sem papel definido, para nao sumirem do dialogo.
+    dialogo = None
+    if any(turnos for _texto, turnos in trechos):
+        dialogo = []
+        for texto, turnos in trechos:
+            dialogo.extend(turnos or [{"role": "Outro", "role_key": "other", "text": texto}])
+
+    log_entry = _transcricoes().adicionar(
+        patient_id,
+        consulta_id,
+        texto=texto_final,
+        duracao_s=sum(parte["duracao_s"] for parte in partes) or 1.0,
+        origem="extension",
+        metadados_audio={"persisted": False, "recording_id": recording_id, "chunks": resumo},
+        turnos=dialogo,
+    )
+    return jsonify({
+        **resposta,
+        "transcription": texto_final,
+        "log_entry": log_entry,
+        "is_error": False,
+    }), 200
+
 
 # Rota para obter EXCLUSIVAMENTE o histórico de transcrições de áudio
 @app.route('/api/patients/<patient_id>/transcription-log', methods=['GET'])

@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     # Use "*" em desenvolvimento; em producao prefira lista separada por virgulas.
     cors_origins: str = "*"
 
+    # Partes (chunks) de audio da gravacao (B30). Ficam em disco so ate a
+    # transcricao; vazio = pasta temporaria do sistema.
+    audio_chunks_dir: str = ""
+    audio_chunk_max_mb: int = 64
+    # Partes de gravacoes nunca finalizadas sao apagadas depois deste prazo.
+    audio_chunk_ttl_hours: int = 24
+
     model_config = SettingsConfigDict(
         env_file=(str(API_ENV_PATH), str(BACKEND_ENV_PATH)),
         extra="ignore",
