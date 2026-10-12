@@ -1,10 +1,20 @@
 import { vi } from "vitest";
+import {
+  IDLE_SNAPSHOT,
+  RECORDING_STATE_KEY,
+  elapsedMs,
+  normalizeSnapshot,
+  type RecordingReply,
+  type RecordingSnapshot,
+} from "../features/recording/recordingProtocol";
 
 // API do backend e chrome.storage simulados para os testes de comportamento do App.
 
 type Consulta = { id: string; title: string; date: string };
 type Historico = { role: string; parts: { text: string }[]; timestamp: string };
 type Chamada = { method: string; path: string; body: unknown; auth: string | undefined };
+type Mensagem = { type: string; target?: string; patientId?: string; consultationId?: string };
+type Ouvinte = (changes: Record<string, { newValue?: unknown }>, area: string) => void;
 
 export const P1 = { id: "p1aaaaaaaaa", name: "Fulano Teste" };
 export const P2 = { id: "p2bbbbbbbbb", name: "Ciclano Teste" };
@@ -21,11 +31,15 @@ export const fake = {
   store: {} as Record<string, unknown>, // chrome.storage.local
   session: {} as Record<string, unknown>, // chrome.storage.session (token e sessao)
   chamadas: [] as Chamada[],
+  mensagens: [] as Mensagem[], // comandos enviados ao background.js (chrome.runtime.sendMessage)
+  abas: [] as string[], // abas abertas com chrome.tabs.create
+  microfone: "granted" as PermissionState,
   authMeStatus: 200,
   pacientesStatus: 200, // 401 simula a sessao vencendo no meio do uso
   pacientes: [] as { id: string; name: string }[],
   consultas: {} as Record<string, Consulta[]>,
   historicos: {} as Record<string, Historico[]>,
+  transcricoesNovas: [] as Record<string, unknown>[], // salvas pelo backend depois da última abertura (P1)
 };
 
 function msg(role: string, text: string): Historico {
@@ -77,6 +91,7 @@ function api(method: string, path: string, body: Record<string, unknown>) {
     const logs =
       decodeURIComponent(m[1]) === P1.id
         ? [
+            ...fake.transcricoesNovas,
             {
               id: 1,
               timestamp: "2026-01-01T10:00:00Z",
@@ -107,6 +122,9 @@ export function instalarFakes() {
   fake.store = {};
   fake.session = {};
   fake.chamadas = [];
+  fake.mensagens = [];
+  fake.abas = [];
+  fake.microfone = "granted";
   fake.authMeStatus = 200;
   fake.pacientesStatus = 200;
   fake.pacientes = [P1, P2];
@@ -120,13 +138,17 @@ export function instalarFakes() {
       { id: "c3zzzzzzzz", title: "Retorno", date: "2026-03-01" },
     ],
   };
+  fake.transcricoesNovas = [];
   fake.historicos = {
     c1xxxxxxxx: [msg("user", "Pergunta da consulta A"), msg("model", "Resposta da consulta A")],
     c3zzzzzzzz: [msg("user", "Pergunta do retorno")],
   };
 
   // Cada area le o objeto de fake.* no momento da chamada (os testes semeiam com Object.assign).
-  const area = (dados: () => Record<string, unknown>) => ({
+  const ouvintes = new Set<Ouvinte>();
+  const avisar = (nome: string, changes: Record<string, { newValue?: unknown }>) =>
+    setTimeout(() => ouvintes.forEach((ouvinte) => ouvinte(changes, nome)), 0);
+  const area = (nome: string, dados: () => Record<string, unknown>) => ({
     get: (keys: string | string[], cb: (r: Record<string, unknown>) => void) => {
       const out: Record<string, unknown> = {};
       for (const k of Array.isArray(keys) ? keys : [keys]) if (k in dados()) out[k] = dados()[k];
@@ -134,15 +156,72 @@ export function instalarFakes() {
     },
     set: (values: Record<string, unknown>, cb?: () => void) => {
       Object.assign(dados(), values);
+      avisar(nome, Object.fromEntries(Object.entries(values).map(([k, v]) => [k, { newValue: v }])));
       if (cb) setTimeout(cb, 0);
     },
     remove: (keys: string[], cb?: () => void) => {
       for (const k of keys) delete dados()[k];
+      avisar(nome, Object.fromEntries(keys.map((k) => [k, {}])));
       if (cb) setTimeout(cb, 0);
     },
   });
+  const sessao = area("session", () => fake.session);
+
+  // No lugar do background.js + documento offscreen: aplica o comando ao estado da gravação
+  // guardado em chrome.storage.session, como o background real faz.
+  function background(mensagem: Mensagem): RecordingReply {
+    const atual = normalizeSnapshot(fake.session[RECORDING_STATE_KEY]);
+    const gravar = (snapshot: RecordingSnapshot) => {
+      sessao.set({ [RECORDING_STATE_KEY]: snapshot });
+      return { ok: true, snapshot };
+    };
+    switch (mensagem.type) {
+      case "recording:sync":
+        return { ok: true, snapshot: atual };
+      case "recording:start":
+        return gravar({
+          ...IDLE_SNAPSHOT,
+          status: "recording",
+          recordingId: "gravacao-teste-0001",
+          patientId: mensagem.patientId ?? null,
+          consultationId: mensagem.consultationId ?? null,
+          resumedAt: Date.now(),
+        });
+      case "recording:pause":
+        return gravar({ ...atual, status: "paused", accumulatedMs: elapsedMs(atual, Date.now()), resumedAt: null });
+      case "recording:resume":
+        return gravar({ ...atual, status: "recording", resumedAt: Date.now() });
+      case "recording:stop":
+        return gravar({ ...atual, status: "finalizing", accumulatedMs: elapsedMs(atual, Date.now()), resumedAt: null });
+      case "recording:ack-result":
+        return gravar({ ...atual, result: null });
+      case "recording:cancel":
+        sessao.remove([RECORDING_STATE_KEY]);
+        return { ok: true, snapshot: IDLE_SNAPSHOT };
+      default:
+        return { ok: false, error: "unknown_command" };
+    }
+  }
+
   const chromeFake = {
-    storage: { local: area(() => fake.store), session: area(() => fake.session) },
+    storage: {
+      local: area("local", () => fake.store),
+      session: sessao,
+      onChanged: {
+        addListener: (ouvinte: Ouvinte) => ouvintes.add(ouvinte),
+        removeListener: (ouvinte: Ouvinte) => ouvintes.delete(ouvinte),
+      },
+    },
+    runtime: {
+      lastError: undefined,
+      getURL: (caminho: string) => `chrome-extension://copmed/${caminho}`,
+      sendMessage: (mensagem: Mensagem, cb?: (reply: RecordingReply) => void) => {
+        fake.mensagens.push(mensagem);
+        const resposta = background(mensagem);
+        if (cb) setTimeout(() => cb(resposta), 0);
+      },
+    },
+    tabs: { create: ({ url }: { url: string }) => fake.abas.push(url) },
   };
   vi.stubGlobal("chrome", chromeFake);
 
@@ -158,10 +237,10 @@ export function instalarFakes() {
     })
   );
 
-  // A gravação começa sozinha ao abrir uma consulta; aqui o microfone nunca responde.
-  Object.defineProperty(navigator, "mediaDevices", {
+  // O popup só consulta a permissão do microfone: quem grava é o documento offscreen.
+  Object.defineProperty(navigator, "permissions", {
     configurable: true,
-    value: { getUserMedia: () => new Promise(() => {}) },
+    value: { query: async () => ({ state: fake.microfone }) },
   });
   Element.prototype.scrollIntoView = vi.fn();
   vi.spyOn(window, "alert").mockImplementation(() => {});
@@ -170,4 +249,14 @@ export function instalarFakes() {
 
 export function chamadasPara(method: string, path: string) {
   return fake.chamadas.filter((c) => c.method === method && c.path === path);
+}
+
+/** Comandos de gravação enviados ao background.js (sem o "recording:sync" de abertura). */
+export function comandosDeGravacao() {
+  return fake.mensagens.filter((m) => m.type !== "recording:sync").map((m) => m.type);
+}
+
+/** Semeia o estado da gravação como o background.js o deixaria em chrome.storage.session. */
+export function gravacaoSalva(snapshot: Partial<RecordingSnapshot>) {
+  fake.session[RECORDING_STATE_KEY] = { ...IDLE_SNAPSHOT, ...snapshot };
 }

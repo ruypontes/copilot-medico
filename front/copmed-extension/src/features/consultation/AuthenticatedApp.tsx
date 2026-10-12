@@ -74,7 +74,8 @@ export default function AuthenticatedApp({ onLogout }: { onLogout: () => void })
         consultations={consultations}
       />
 
-      {consultationId && <RecordingPanel recording={recording} />}
+      {/* Com uma gravação em curso o painel fica visível mesmo sem consulta aberta, para poder pará-la */}
+      {(consultationId || recording.isActive) && <RecordingPanel recording={recording} />}
 
       {/* Main Chat Area */}
       <div className="chat-container">

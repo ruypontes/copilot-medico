@@ -42,11 +42,6 @@ export type TranscriptionLogItem = {
   dialogue?: TranscriptionDialogueTurn[];
 };
 
-export type WindowWithWebkitAudio = Window &
-  typeof globalThis & {
-    webkitAudioContext?: typeof AudioContext;
-  };
-
 export function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }

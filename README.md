@@ -94,8 +94,10 @@ cd front/copmed-extension && npm install && npm run build
 ```
 
 Em `chrome://extensions`, ative o **Modo desenvolvedor**, clique em **Carregar
-sem compactação** e selecione `front/copmed-extension/dist`. Para gravar áudio,
-libere o Microfone nas permissões da extensão.
+sem compactação** e selecione `front/copmed-extension/dist`. No primeiro
+**Iniciar gravação** a extensão abre uma aba pedindo a permissão do microfone
+(o Chrome não mostra esse pedido dentro do popup); depois de autorizar, a
+gravação segue mesmo com o popup fechado e o áudio sobe em partes de até 5 min.
 
 ### Rodando sem Docker
 
