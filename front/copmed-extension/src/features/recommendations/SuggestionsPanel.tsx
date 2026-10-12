@@ -50,7 +50,10 @@ export default function SuggestionsPanel({ patientId, consultationId }: Props) {
         >
           {loading ? "⏳ Gerando sugestões..." : "💡 Sugestões"}
         </button>
-        <label style={{ fontSize: "0.85em", display: "flex", alignItems: "center", gap: "4px" }}>
+        <label
+          className="suggestions-window"
+          style={{ fontSize: "0.85em", display: "flex", alignItems: "center", gap: "4px" }}
+        >
           últimos
           <select
             aria-label="Janela das sugestões em minutos"
@@ -75,7 +78,7 @@ export default function SuggestionsPanel({ patientId, consultationId }: Props) {
       {info && <div style={{ color: "#888", fontSize: "0.85em" }}>{info}</div>}
 
       {items.length > 0 && (
-        <div style={{ border: "1px solid #d9c9f2", borderRadius: "6px", padding: "8px", background: "#faf7ff" }}>
+        <div className="suggestions-box" style={{ borderRadius: "6px", padding: "8px" }}>
           <ul style={{ margin: 0, paddingLeft: "4px", listStyle: "none" }}>
             {items.map((item, index) => (
               <li key={`${index}-${item.texto}`} style={{ marginBottom: "6px", fontSize: "0.9em" }}>
@@ -85,7 +88,7 @@ export default function SuggestionsPanel({ patientId, consultationId }: Props) {
             ))}
           </ul>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <small style={{ color: "#888" }}>
+            <small className="suggestions-note">
               Apoio à decisão: valide clinicamente. Não é gravado no prontuário.
             </small>
             <button type="button" onClick={clear} style={{ fontSize: "0.8em" }}>
