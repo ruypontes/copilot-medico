@@ -12,6 +12,7 @@ from backend import audio_chunks
 from backend import gemini_connection
 from backend import pdf_reader
 from backend import pep_import
+from backend import recomendacoes
 from backend.anonimizacao import MapaAnonimizacao, anonimizar, anonimizar_estrutura
 from backend.anonimizacao import servico as anonimizacao_servico
 from backend.openapi import build_openapi_spec
@@ -1399,60 +1400,72 @@ def get_all_patients():
 @app.route('/api/recommendations', methods=['POST'])
 @roles_required("administrador", "medico")
 def handle_recommendations():
+    """Sugestoes curtas sobre a janela parcial da consulta (B38 / US020).
+
+    JSON: patient_id, consultation_id e janela_min (opcional, padrao 5).
+    Usa so as transcricoes da consulta gravadas nos ultimos `janela_min`
+    minutos - nao o chat inteiro. O texto sai anonimizado (US016), volta
+    reidratado para o medico ler, e NADA e gravado no prontuario (US020-CA003).
     """
-    Endpoint para solicitação de recomendações com base no andamento/histórico da consulta.
-    """
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+
+    patient_id = data.get('patient_id')
+    consultation_id = data.get('consultation_id')
+    if not patient_id or not consultation_id:
+        return _json_error("patient_id e consultation_id sao obrigatorios.", 400)
     try:
+        janela_min = recomendacoes.validar_janela(data.get('janela_min'))
+    except recomendacoes.JanelaInvalida as e:
+        return _json_error(str(e), 400)
 
-        data = request.get_json()
+    _patient_data, access_error = require_patient_access(patient_id)
+    if access_error:
+        return access_error
+    if not _consultas().pertence_ao_paciente(patient_id, consultation_id):
+        return _json_error("Consulta nao encontrada para este paciente.", 404)
 
-        # Verifica se o JSON existe
-        if not data:
-            return jsonify({"error": "Requisição inválida. Corpo JSON esperado."}), 400
+    desde = datetime.now(timezone.utc) - timedelta(minutes=janela_min)
+    transcricoes = _transcricoes().listar_da_consulta_desde(consultation_id, desde)
+    trecho = recomendacoes.montar_trecho(transcricoes)
 
-        # Verifica se o patient_id e o consultation_id estão presentes no JSON
-        patient_id = data.get('patient_id')
-        consultation_id = data.get('consultation_id')
+    resposta = {
+        "status": "success",
+        "janela_min": janela_min,
+        "transcricoes_usadas": len(transcricoes),
+        "prompt": {"id": recomendacoes.PROMPT_ID, "versao": recomendacoes.PROMPT_VERSAO},
+    }
+    if not trecho:
+        # Sem transcricao na janela nao ha o que analisar: nem chama o modelo.
+        return jsonify({
+            **resposta,
+            "itens": [],
+            "recommendation": "",
+            "message": f"Nenhuma transcrição nos últimos {janela_min} min. "
+                       "Uma gravação em andamento só entra depois de parar.",
+        }), 200
 
-        if not patient_id or not consultation_id:
-            return jsonify({"error": "paciente_id e consulta_id não encontrados."}), 400
-
-        # Define o caminho para o arquivo do prompt de recomendações
-        _patient_data, access_error = require_patient_access(patient_id)
-        if access_error:
-            return access_error
-        if not _consultas().pertence_ao_paciente(patient_id, consultation_id):
-            return _json_error("Consulta nao encontrada para este paciente.", 404)
-
-        prompt_file_path = os.path.join(os.path.dirname(__file__), 'recommendations.txt')
-
-        # Verifica se o arquivo existe
-        if not os.path.exists(prompt_file_path):
-            raise FileNotFoundError(f"Arquivo de prompt não encontrado em: {prompt_file_path}")
-
-        # Lê o conteúdo do arquivo
-        with open(prompt_file_path, 'r', encoding='utf-8') as f:
-            prompt_recomendacao_medica = f.read()
-
-        if not prompt_recomendacao_medica:
-            raise ValueError(f"O arquivo de prompt {prompt_file_path} está vazio.")
-
-        print(f"[RECOMENDAÇÃO] Iniciando busca para consulta_id: {consultation_id}")
-
-        # Chama a API Gemini. Ela carrega o histórico (incluindo transcrições) e
-        # recebe o prompt de recomendação.
-        resposta_ia = gemini_connection.send_message(
-            patient_id,
-            consultation_id,
-            prompt_recomendacao_medica
-        )
-
-        # Retornar a recomendação para o frontend
-        return jsonify({"status": "success", "recommendation": resposta_ia}), 200
-
+    texto_anonimo, mapa = _anonimizar_para_envio(trecho, patient_id, consultation_id)
+    try:
+        bruta = gemini_connection.gerar_resposta_unica(recomendacoes.INSTRUCAO, texto_anonimo)
     except Exception as e:
-        print(f"Erro catastrófico no endpoint /get_recommendation: {e}")
-        return jsonify({"error": f"Erro interno do servidor: {str(e)}"}), 500
+        # So metadados no log: nunca o conteudo da consulta.
+        print(f"[RECOMENDAÇÃO] Falha no modelo para a consulta {consultation_id}: {type(e).__name__}")
+        return _json_error("Não foi possível gerar sugestões agora. Tente de novo.", 502)
+
+    itens = [
+        {**item, "texto": mapa.reidratar(item["texto"])}
+        for item in recomendacoes.interpretar_resposta(bruta)
+    ]
+    print(f"[RECOMENDAÇÃO] Consulta {consultation_id}: {len(itens)} sugestão(ões) "
+          f"sobre {len(transcricoes)} transcrição(ões) de {janela_min} min.")
+    return jsonify({
+        **resposta,
+        "itens": itens,
+        # Texto corrido mantido para quem ainda le o formato antigo da rota.
+        "recommendation": "\n".join(f"- {item['texto']}" for item in itens),
+    }), 200
 
 
 

@@ -367,13 +367,22 @@ def test_upload_pdf_other_doctor_403(client, outro_medico, paciente):
 
 # ---------- POST /api/recommendations ----------
 
-def test_recommendations_success(client, medico, paciente):
+def test_recommendations_success(client, medico, paciente, monkeypatch):
+    # B38: as sugestoes saem das transcricoes da janela, nao do chat inteiro.
+    import server
+    from repositories import TranscricaoRepository
+
     pid, cid = paciente
+    TranscricaoRepository(sessao.obter_sessao()).adicionar(pid, cid, texto="Paciente com tosse", duracao_s=60)
+    monkeypatch.setattr(server.gemini_connection, "gerar_resposta_unica",
+                        lambda _i, _c: '{"itens": [{"tipo": "exame", "texto": "Auscultar pulmões"}]}')
     resp = client.post("/api/recommendations", json={
         "patient_id": pid, "consultation_id": cid,
     }, headers=medico)
     assert resp.status_code == 200
-    assert resp.get_json()["recommendation"]
+    body = resp.get_json()
+    assert body["itens"] == [{"tipo": "exame", "texto": "Auscultar pulmões"}]
+    assert body["recommendation"]
 
 
 def test_recommendations_validation_400(client, medico):
