@@ -3,7 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
 import { API_URL, API_URL_KEY } from "./services/api";
-import { P1, P2, PACIENTE_SALVO, TOKEN, chamadasPara, fake, instalarFakes } from "./test/extensaoFake";
+import { RECORDING_STATE_KEY, type RecordingSnapshot } from "./features/recording/recordingProtocol";
+import {
+  P1,
+  P2,
+  PACIENTE_SALVO,
+  TOKEN,
+  chamadasPara,
+  comandosDeGravacao,
+  fake,
+  gravacaoSalva,
+  instalarFakes,
+} from "./test/extensaoFake";
 import fixtureAmplimed from "../tests/fixtures/pep/amplimed-consulta.html?raw";
 
 // Testes de comportamento da extensão pela interface: a API e o chrome.storage são simulados,
@@ -262,5 +273,209 @@ describe("chat e transcrições", () => {
     } finally {
       fixtureHolder.remove();
     }
+  });
+});
+
+// B29: quem grava é o documento offscreen; o popup só envia comandos e mostra o estado que o
+// background.js guarda em chrome.storage.session. "Reabrir o popup" = renderizar o App de novo
+// com esse estado já salvo.
+describe("gravação da consulta", () => {
+  const EM_ANDAMENTO: Partial<RecordingSnapshot> = {
+    status: "recording",
+    recordingId: "gravacao-teste-0001",
+    patientId: P1.id,
+    consultationId: "c1xxxxxxxx",
+  };
+  const estadoSalvo = () => fake.session[RECORDING_STATE_KEY] as RecordingSnapshot;
+  const botao = (name: string) => screen.getByRole<HTMLButtonElement>("button", { name });
+
+  it("não grava sozinha; Iniciar envia o comando com paciente e consulta e liga o cronômetro", async () => {
+    await abrirComPacienteSalvo();
+    expect(comandosDeGravacao()).toEqual([]);
+    expect(botao("⏹️ Parar").disabled).toBe(true);
+
+    fireEvent.click(botao("🎙️ Iniciar gravação"));
+
+    await screen.findByText(/● Gravando\.\.\. \(0:0\d\)/);
+    expect(fake.mensagens.find((m) => m.type === "recording:start")).toMatchObject({
+      target: "background",
+      patientId: P1.id,
+      consultationId: "c1xxxxxxxx",
+    });
+    botao("⏸️ Pausar");
+    expect(botao("⏹️ Parar").disabled).toBe(false);
+  });
+
+  it("sem permissão do microfone abre a página de permissão em vez de gravar", async () => {
+    fake.microfone = "prompt";
+    await abrirComPacienteSalvo();
+
+    fireEvent.click(botao("🎙️ Iniciar gravação"));
+
+    await screen.findByText(/Autorize o microfone na aba que foi aberta/);
+    expect(fake.abas).toEqual(["chrome-extension://copmed/microfone.html"]);
+    expect(comandosDeGravacao()).toEqual([]);
+  });
+
+  it("reabrir o popup no meio da gravação restaura os controles e o cronômetro", async () => {
+    gravacaoSalva({ ...EM_ANDAMENTO, accumulatedMs: 5 * 60_000, resumedAt: Date.now() - 65_000 });
+
+    await abrirComPacienteSalvo();
+
+    // 5 min já acumulados + 65 s do trecho em curso, contados enquanto o popup estava fechado
+    await screen.findByText(/● Gravando\.\.\. \(6:0\d\)/);
+    botao("⏸️ Pausar");
+    expect(comandosDeGravacao()).toEqual([]); // reabrir não inicia nem interrompe nada
+  });
+
+  it("reabrir o popup com a gravação pausada mostra o tempo parado e permite retomar", async () => {
+    gravacaoSalva({ ...EM_ANDAMENTO, status: "paused", accumulatedMs: 125_000, resumedAt: null });
+
+    await abrirComPacienteSalvo();
+    await screen.findByText("⏸️ Pausado (2:05)");
+
+    fireEvent.click(botao("▶️ Retomar"));
+
+    await screen.findByText(/● Gravando\.\.\. \(2:0\d\)/);
+    expect(comandosDeGravacao()).toEqual(["recording:resume"]);
+  });
+
+  it("pausar congela o cronômetro e parar passa para o processamento", async () => {
+    gravacaoSalva({ ...EM_ANDAMENTO, accumulatedMs: 0, resumedAt: Date.now() - 30_000 });
+    await abrirComPacienteSalvo();
+    await screen.findByText(/● Gravando/);
+
+    fireEvent.click(botao("⏸️ Pausar"));
+    await screen.findByText(/⏸️ Pausado \(0:3\d\)/);
+    expect(estadoSalvo()).toMatchObject({ status: "paused", resumedAt: null });
+
+    fireEvent.click(botao("⏹️ Parar"));
+    await screen.findByText(/⏳ Processando\.\.\./);
+    expect(comandosDeGravacao()).toEqual(["recording:pause", "recording:stop"]);
+    // durante o processamento não dá para iniciar outra gravação
+    expect(botao("🎙️ Iniciar gravação").disabled).toBe(true);
+  });
+
+  it("partes aguardando reenvio aparecem como aviso e a gravação continua", async () => {
+    gravacaoSalva({
+      ...EM_ANDAMENTO,
+      resumedAt: Date.now(),
+      chunksSent: 1,
+      chunksPending: 2,
+      warning: "upload_failed",
+    });
+
+    await abrirComPacienteSalvo();
+
+    await screen.findByText("⚠️ 2 parte(s) do áudio aguardando reenvio. A gravação continua.");
+    screen.getByText(/● Gravando/);
+  });
+
+  it("transcrição concluída com o popup fechado vai para o chat e o histórico ao reabrir", async () => {
+    const logEntry = { id: 99, timestamp: "2026-01-02T10:00:00Z", duration: "120:00", consultation_id: "c1xxxxxxxx" };
+    fake.transcricoesNovas = [logEntry]; // o backend já salvou a transcrição quando o popup reabre
+    gravacaoSalva({
+      result: {
+        recordingId: "gravacao-teste-0001",
+        patientId: P1.id,
+        consultationId: "c1xxxxxxxx",
+        stopReason: "limit",
+        transcription: "Paciente relata febre há três dias.",
+        logEntry,
+        error: null,
+        missingChunks: [2],
+      },
+    });
+
+    await abrirComPacienteSalvo();
+
+    await waitFor(() =>
+      expect(chamadasPara("POST", "/api/chat")[0]?.body).toMatchObject({
+        message: "Paciente relata febre há três dias.",
+        consultation_id: "c1xxxxxxxx",
+      })
+    );
+    // a transcrição nova aparece uma vez só, venha do resultado ou da lista do servidor
+    await screen.findByRole("button", { name: "📂 Transcrições (2)" });
+    screen.getByText(/atingiu o limite de 120 minutos/);
+    screen.getByText(/Parte\(s\) 2 do áudio não foram enviadas ou transcritas/);
+    // entregue uma única vez: o resultado sai do estado guardado
+    expect(comandosDeGravacao()).toEqual(["recording:ack-result"]);
+    await waitFor(() => expect(estadoSalvo().result).toBeNull());
+    expect(chamadasPara("POST", "/api/chat")).toHaveLength(1);
+  });
+
+  it("gravação sem transcrição mostra o motivo e não envia nada ao chat", async () => {
+    gravacaoSalva({
+      result: {
+        recordingId: "gravacao-teste-0002",
+        patientId: P1.id,
+        consultationId: "c1xxxxxxxx",
+        stopReason: "manual",
+        transcription: null,
+        logEntry: null,
+        error: "Não foi possível enviar o áudio ao servidor. Verifique a conexão e grave novamente.",
+        missingChunks: [],
+      },
+    });
+
+    await abrirComPacienteSalvo();
+
+    await screen.findByText(/❌ Não foi possível enviar o áudio ao servidor/);
+    expect(chamadasPara("POST", "/api/chat")).toEqual([]);
+    expect(screen.queryByText("✓ Arquivo salvo")).toBeNull();
+  });
+
+  it("resultado de outra consulta espera até ela ser aberta", async () => {
+    gravacaoSalva({
+      result: {
+        recordingId: "gravacao-teste-0003",
+        patientId: P1.id,
+        consultationId: "c2yyyyyyyy",
+        stopReason: "manual",
+        transcription: "Texto da consulta B",
+        logEntry: null,
+        error: null,
+        missingChunks: [],
+      },
+    });
+
+    const { container } = await abrirComPacienteSalvo(); // abre a consulta A
+    await screen.findByRole("button", { name: "📂 Transcrições (1)" });
+    expect(chamadasPara("POST", "/api/chat")).toEqual([]);
+    expect(comandosDeGravacao()).toEqual([]);
+
+    const seletorConsulta = container.querySelectorAll<HTMLSelectElement>("select.patient-select")[1];
+    await waitFor(() => expect(seletorConsulta.disabled).toBe(false));
+    fireEvent.change(seletorConsulta, { target: { value: "c2yyyyyyyy" } });
+
+    await waitFor(() =>
+      expect(chamadasPara("POST", "/api/chat")[0]?.body).toMatchObject({
+        message: "Texto da consulta B",
+        consultation_id: "c2yyyyyyyy",
+      })
+    );
+  });
+
+  it("gravação de outra consulta continua visível e pode ser parada", async () => {
+    gravacaoSalva({ ...EM_ANDAMENTO, consultationId: "c2yyyyyyyy", resumedAt: Date.now() });
+
+    await abrirComPacienteSalvo(); // consulta A aberta; a gravação é da consulta B
+
+    await screen.findByText("⚠️ Esta gravação pertence a outra consulta.");
+    fireEvent.click(botao("⏹️ Parar"));
+    await screen.findByText(/⏳ Processando\.\.\./);
+  });
+
+  it("sair da conta cancela a gravação em andamento", async () => {
+    gravacaoSalva({ ...EM_ANDAMENTO, resumedAt: Date.now() });
+    await abrirComPacienteSalvo();
+    await screen.findByText(/● Gravando/);
+
+    fireEvent.click(botao("Sair"));
+
+    await screen.findByRole("heading", { name: "Entrar" });
+    expect(comandosDeGravacao()).toEqual(["recording:cancel"]);
+    expect(fake.session).toEqual({});
   });
 });

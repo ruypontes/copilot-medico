@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CopMed - permissão do microfone</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 520px;
+        margin: 80px auto;
+        padding: 0 20px;
+        color: #222;
+        line-height: 1.5;
+      }
+      h1 {
+        font-size: 1.3em;
+        color: #336b29;
+      }
+      button {
+        padding: 10px 16px;
+        border: none;
+        border-radius: 6px;
+        background: #336b29;
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      #status {
+        margin-top: 16px;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Permitir o microfone para gravar a consulta</h1>
+    <p>
+      O navegador não mostra o pedido de permissão dentro do popup da extensão. Autorize o
+      microfone aqui uma única vez; depois volte ao CopMed e clique em “Iniciar gravação”.
+    </p>
+    <button id="permitir" type="button">Permitir microfone</button>
+    <p id="status" role="status"></p>
+    <script type="module" src="/src/microphone/main.ts"></script>
+  </body>
+</html>

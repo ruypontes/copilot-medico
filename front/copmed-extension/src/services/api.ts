@@ -260,13 +260,6 @@ export function uploadPdf(formData: FormData) {
   });
 }
 
-export function sendAudio(formData: FormData) {
-  return apiRequest("/api/transcribe_audio", {
-    method: "POST",
-    body: formData,
-  });
-}
-
 export function sendExtractedData(payload: Record<string, unknown>) {
   return apiRequest("/api/extension/extracted-data", {
     method: "POST",

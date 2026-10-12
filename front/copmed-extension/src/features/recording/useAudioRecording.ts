@@ -1,7 +1,20 @@
 import { Dispatch, SetStateAction, useCallback, useEffect, useRef, useState } from "react";
 import { botMessage, type Message, type TranscriptionLogItem } from "../shared/types";
-import { formatDuration } from "./wav";
-import { useTranscriptionUpload } from "./useTranscriptionUpload";
+import {
+  microphonePermission,
+  openMicrophonePermissionPage,
+  readRecordingSnapshot,
+  sendRecordingCommand,
+  watchRecordingSnapshot,
+} from "./recordingClient";
+import {
+  IDLE_SNAPSHOT,
+  MAX_RECORDING_MS,
+  elapsedMs,
+  type RecordingResult,
+  type RecordingSnapshot,
+} from "./recordingProtocol";
+import { useTranscriptionLog } from "./useTranscriptionLog";
 
 export type RecordingParams = {
   patientId: string | null;
@@ -10,197 +23,149 @@ export type RecordingParams = {
   handleSendMessage: (messageText: string) => Promise<void>;
 };
 
-// Gravação da consulta: início automático, pausa, parada, envio para transcrição e histórico.
+const START_ERRORS: Record<string, string> = {
+  mic_denied: "Permissão de microfone negada. Libere o microfone para a extensão e tente de novo.",
+  mic_not_found: "Nenhum microfone encontrado. Conecte um microfone e tente de novo.",
+  already_recording: "Já existe uma gravação em andamento.",
+};
+
+// Avisos sobre como a gravação terminou, exibidos no painel (as mensagens do chat são
+// substituídas quando o histórico recarrega, então não servem para isso).
+function outcomeNotices(result: RecordingResult): string[] {
+  const notices: string[] = [];
+  if (result.stopReason === "limit") {
+    notices.push(
+      `⏱️ A gravação atingiu o limite de ${MAX_RECORDING_MS / 60000} minutos e foi encerrada automaticamente.`
+    );
+  }
+  if (result.stopReason === "device") {
+    notices.push("🎙️ O microfone foi desconectado: a gravação foi encerrada nesse ponto.");
+  }
+  if (result.missingChunks.length > 0) {
+    notices.push(
+      `⚠️ Parte(s) ${result.missingChunks.join(", ")} do áudio não foram enviadas ou transcritas: a transcrição pode estar incompleta.`
+    );
+  }
+  if (!result.transcription) {
+    notices.push(`❌ ${result.error ?? "Não foi possível transcrever o áudio."}`);
+  }
+  return notices;
+}
+
+// Gravação da consulta (B29): iniciar, pausar, retomar, parar e cronômetro.
+//
+// A gravação em si acontece fora do popup (documento offscreen, ver recordingProtocol.ts).
+// Este hook só espelha o estado guardado pelo background.js e envia comandos — por isso, ao
+// reabrir o popup no meio de uma gravação, os controles e o cronômetro voltam onde estavam.
 export function useAudioRecording({
   patientId,
   consultationId,
   setMessages,
   handleSendMessage,
 }: RecordingParams) {
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [snapshot, setSnapshot] = useState<RecordingSnapshot>(IDLE_SNAPSHOT);
+  const [now, setNow] = useState(() => Date.now()); // relógio do cronômetro visual
   const [showRecordingHistory, setShowRecordingHistory] = useState<boolean>(false);
   const [hasRecordedAudio, setHasRecordedAudio] = useState<boolean>(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const audioBlobRef = useRef<Blob | null>(null);
-  const recordingStartTimeRef = useRef<number>(0);
-  const recordingDurationRef = useRef<number>(0);
-  const [elapsedTime, setElapsedTime] = useState<number>(0); // Cronômetro visual
+  const [notices, setNotices] = useState<string[]>([]);
   const [viewingLog, setViewingLog] = useState<TranscriptionLogItem | null>(null); // Armazena o log que está sendo lido
+  const deliveredRef = useRef<string | null>(null);
 
-  // --- EFEITO 1: LIMPEZA DE ESTADO ---
+  const { transcriptionLog, addTranscription } = useTranscriptionLog(patientId);
+
+  const isRecording = snapshot.status === "recording";
+  const isPaused = snapshot.status === "paused";
+  const isProcessing = snapshot.status === "finalizing";
+  const isActive = snapshot.status !== "idle";
+
+  // --- EFEITO 1: ESTADO DA GRAVAÇÃO (mantido fora do popup) ---
   useEffect(() => {
-    return () => {
-      console.log("🔄 Trocando de contexto/consulta. Limpando gravador...");
-
-      // 1. Para o Hardware
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
-
-      // 2. Reseta Referências
-      streamRef.current = null;
-      mediaRecorderRef.current = null;
-      chunksRef.current = [];
-      audioBlobRef.current = null;
-      recordingDurationRef.current = 0;
-
-      // 3. Reseta Estados Visuais
-      setIsRecording(false);
-      setIsPaused(false);
-      setIsProcessing(false);
-      setHasRecordedAudio(false);
-      setElapsedTime(0); // Zera o relógio visual
+    let mounted = true;
+    const apply = (next: RecordingSnapshot) => {
+      if (mounted) setSnapshot(next);
     };
+    readRecordingSnapshot().then(apply);
+    const unwatch = watchRecordingSnapshot(apply);
+    // Confere com o background se a gravação guardada ainda existe de fato.
+    sendRecordingCommand({ type: "recording:sync" }).then((reply) => {
+      if (reply.snapshot) apply(reply.snapshot);
+    });
+    return () => {
+      mounted = false;
+      unwatch();
+    };
+  }, []);
+
+  // --- EFEITO 2: CRONÔMETRO VISUAL ---
+  // O tempo vem sempre do estado (acumulado + trecho em curso); o intervalo só redesenha.
+  useEffect(() => {
+    if (!isRecording) return;
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
+  const elapsedTime = elapsedMs(snapshot, now) / 1000;
+
+  // --- EFEITO 3: troca de consulta limpa os avisos da gravação anterior ---
+  useEffect(() => {
+    setHasRecordedAudio(false);
+    setNotices([]);
   }, [consultationId]);
 
-  // --- EFEITO 2: HISTÓRICO E ENVIO DE TRANSCRIÇÕES ---
-  const { transcriptionLog, processAndSendAudio } = useTranscriptionUpload({
-    patientId,
-    consultationId,
-    setMessages,
-    handleSendMessage,
-  });
-
-  // --- EFEITO 3: CRONÔMETRO VISUAL (Atualiza a cada segundo) ---
+  // --- EFEITO 4: ENTREGA DA TRANSCRIÇÃO ---
+  // A gravação pode terminar com o popup fechado: o resultado espera no estado até a consulta
+  // dele estar aberta aqui, e então segue para o histórico e para o chat.
+  const result = snapshot.result;
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
-
-    if (isRecording && !isPaused) {
-      interval = setInterval(() => {
-        // Calcula o tempo total: acumulado anterior + tempo da sessão atual
-        const currentSessionTime = (Date.now() - recordingStartTimeRef.current) / 1000;
-        setElapsedTime(recordingDurationRef.current + currentSessionTime);
-      }, 1000);
+    if (!result || result.consultationId !== consultationId || result.patientId !== patientId) {
+      return;
     }
+    if (deliveredRef.current === result.recordingId) return;
+    deliveredRef.current = result.recordingId;
+    sendRecordingCommand({ type: "recording:ack-result" });
 
-    return () => {
-      if (interval !== undefined) clearInterval(interval);
-    };
-  }, [isRecording, isPaused]);
+    setNotices(outcomeNotices(result));
+    if (!result.transcription) return; // o motivo já está nos avisos do painel
+    setHasRecordedAudio(true);
+    if (result.logEntry) addTranscription(result.logEntry); // Atualiza lista visual de logs
+    handleSendMessage(result.transcription); // Envia transcrição para o fluxo de chat
+  }, [result, consultationId, patientId, addTranscription, handleSendMessage]);
 
-  // --- Função para iniciar gravação (Com DELAY Anti-Alucinação) ---
+  // --- Função para iniciar gravação ---
   const startAudioRecording = useCallback(async () => {
-    try {
-      if (isProcessing || isRecording || isPaused) return;
-      if (!consultationId) return;
+    if (!patientId || !consultationId || isActive) return;
 
-      console.log("🎤 Preparando gravação automática...");
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-      audioBlobRef.current = null;
-
-      // Reseta contadores antes de começar
-      setElapsedTime(0);
-      recordingStartTimeRef.current = Date.now();
-      recordingDurationRef.current = 0;
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        console.log("⏹️ Gravação parada");
-
-        const finalDuration = recordingDurationRef.current;
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        audioBlobRef.current = blob;
-
-        if (blob.size > 1000) {
-          setHasRecordedAudio(true);
-          console.log(`✅ Áudio gravado. Duração: ${formatDuration(finalDuration)}`);
-
-          setIsProcessing(true);
-          try {
-            await processAndSendAudio(blob, finalDuration);
-          } catch (error) {
-            console.error("Erro ao processar:", error);
-          } finally {
-            setIsProcessing(false);
-          }
-        } else {
-          console.log("Áudio muito curto...");
-          setHasRecordedAudio(false);
-          audioBlobRef.current = null;
-        }
-
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach((track) => track.stop());
-          streamRef.current = null;
-        }
-        chunksRef.current = [];
-      };
-
-      // --- CORREÇÃO DE ALUCINAÇÃO: Pequeno delay de 200ms ---
-      setTimeout(() => {
-        if (mediaRecorder.state === "inactive") {
-          mediaRecorder.start();
-          setIsRecording(true);
-          setIsPaused(false);
-          setHasRecordedAudio(false);
-
-          // Define o tempo inicial real AGORA, após o delay
-          recordingStartTimeRef.current = Date.now();
-          recordingDurationRef.current = 0;
-          setElapsedTime(0);
-        }
-      }, 200);
-    } catch (error: unknown) {
-      console.error("Erro ao iniciar gravação:", error);
-      let errorMessage = "Erro ao acessar o microfone.";
-      const errorName = error instanceof Error ? error.name : "";
-      if (errorName === "NotAllowedError") errorMessage = "Permissão de microfone negada.";
-      setMessages((prev) => [...prev, botMessage(errorMessage)]);
+    if ((await microphonePermission()) !== "granted") {
+      openMicrophonePermissionPage();
+      setMessages((prev) => [
+        ...prev,
+        botMessage(
+          "🎙️ Autorize o microfone na aba que foi aberta e clique em “Iniciar gravação” novamente."
+        ),
+      ]);
+      return;
     }
-  }, [isProcessing, isRecording, isPaused, processAndSendAudio, consultationId, setMessages]);
 
-  // --- Função para pausar gravação ---
+    setHasRecordedAudio(false);
+    setNotices([]);
+    const reply = await sendRecordingCommand({ type: "recording:start", patientId, consultationId });
+    if (reply.snapshot) setSnapshot(reply.snapshot);
+    if (!reply.ok) {
+      const text = START_ERRORS[reply.error ?? ""] ?? "Erro ao acessar o microfone.";
+      setMessages((prev) => [...prev, botMessage(text)]);
+    }
+  }, [patientId, consultationId, isActive, setMessages]);
+
+  // --- Função para pausar/retomar gravação ---
   const togglePauseRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording && !isPaused) {
-      // PAUSAR
-      mediaRecorderRef.current.pause();
-      setIsRecording(false);
-      setIsPaused(true);
-      // Congela a duração acumulada até agora
-      recordingDurationRef.current += (Date.now() - recordingStartTimeRef.current) / 1000;
-      console.log("⏸️ Gravação pausada");
-    } else if (mediaRecorderRef.current && !isRecording && isPaused) {
-      // RETOMAR
-      mediaRecorderRef.current.resume();
-      setIsRecording(true);
-      setIsPaused(false);
-      // Reinicia o "ponto de partida" do segmento atual
-      recordingStartTimeRef.current = Date.now();
-      console.log("▶️ Gravação retomada");
-    }
+    if (isRecording) sendRecordingCommand({ type: "recording:pause" });
+    else if (isPaused) sendRecordingCommand({ type: "recording:resume" });
   }, [isRecording, isPaused]);
 
   // --- Função para parar gravação ---
   const stopAudioRecording = useCallback(() => {
-    if (mediaRecorderRef.current && (isRecording || isPaused)) {
-      // Se estava gravando, soma o último segmento
-      if (!isPaused) {
-        recordingDurationRef.current += (Date.now() - recordingStartTimeRef.current) / 1000;
-      }
-      // Para forçado o relógio visual no valor final
-      setElapsedTime(recordingDurationRef.current);
-
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      setIsPaused(false);
-      console.log("⏹️ Gravação finalizada manualmente");
-    }
+    if (isRecording || isPaused) sendRecordingCommand({ type: "recording:stop" });
   }, [isRecording, isPaused]);
 
   // --- Função para ver histórico ---
@@ -208,26 +173,24 @@ export function useAudioRecording({
     setShowRecordingHistory((prev) => !prev);
   }, []);
 
-  useEffect(() => {
-    // --- Auto-Start ---
-    if (consultationId && !isRecording && !isProcessing && !isPaused && !viewingLog) {
-      const timer = setTimeout(() => {
-        startAudioRecording();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [consultationId, isRecording, isProcessing, isPaused, startAudioRecording, viewingLog]);
-
   return {
     isRecording,
     isPaused,
     isProcessing,
+    isActive,
+    canStart: Boolean(patientId && consultationId) && !isActive,
+    // A gravação pertence à consulta em que começou, mesmo que outra esteja aberta agora.
+    isOtherConsultation: isActive && snapshot.consultationId !== consultationId,
     hasRecordedAudio,
     elapsedTime,
+    pendingChunks: snapshot.chunksPending,
+    uploadWarning: snapshot.warning,
+    notices,
     showRecordingHistory,
     transcriptionLog,
     viewingLog,
     setViewingLog,
+    startAudioRecording,
     togglePauseRecording,
     stopAudioRecording,
     toggleRecordingHistory,

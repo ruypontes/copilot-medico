@@ -84,3 +84,172 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // manter a comunicação aberta para a resposta assíncrona.
   }
 });
+
+// ---------------------------------------------------------------------------
+// Gravacao da consulta (B29/B30)
+//
+// Quem grava e o documento offscreen (src/offscreen/main.ts): o popup e destruido ao fechar
+// e levaria o MediaRecorder junto. Este service worker cria/fecha esse documento, repassa os
+// comandos do popup e guarda o estado da gravacao em chrome.storage.session - e de la que o
+// popup o le ao reabrir. As chaves e mensagens espelham
+// src/features/recording/recordingProtocol.ts.
+// ---------------------------------------------------------------------------
+const RECORDING_STATE_KEY = 'copmed_recording_state';
+const OFFSCREEN_URL = 'offscreen.html';
+const IDLE_RECORDING = {
+  status: 'idle',
+  recordingId: null,
+  patientId: null,
+  consultationId: null,
+  accumulatedMs: 0,
+  resumedAt: null,
+  chunksSent: 0,
+  chunksPending: 0,
+  warning: null,
+  result: null,
+};
+
+let creatingOffscreen = null;
+
+async function hasOffscreenDocument() {
+  const contexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [chrome.runtime.getURL(OFFSCREEN_URL)],
+  });
+  return contexts.length > 0;
+}
+
+async function ensureOffscreenDocument() {
+  if (await hasOffscreenDocument()) return;
+  // Dois comandos seguidos nao podem criar dois documentos: o Chrome so permite um.
+  if (!creatingOffscreen) {
+    creatingOffscreen = chrome.offscreen
+      .createDocument({
+        url: OFFSCREEN_URL,
+        reasons: ['USER_MEDIA'],
+        justification: 'Gravar o audio da consulta enquanto o popup da extensao esta fechado.',
+      })
+      .finally(() => {
+        creatingOffscreen = null;
+      });
+  }
+  await creatingOffscreen;
+}
+
+async function closeOffscreenDocument() {
+  if (await hasOffscreenDocument()) {
+    await chrome.offscreen.closeDocument().catch(() => {});
+  }
+}
+
+async function readRecordingState() {
+  const stored = await chrome.storage.session.get([RECORDING_STATE_KEY]);
+  return stored[RECORDING_STATE_KEY] || IDLE_RECORDING;
+}
+
+function writeRecordingState(snapshot) {
+  return chrome.storage.session.set({ [RECORDING_STATE_KEY]: snapshot });
+}
+
+function sendToOffscreen(message) {
+  return chrome.runtime.sendMessage({ ...message, target: 'offscreen' });
+}
+
+// Repassa um comando ao documento offscreen e guarda o estado que ele devolve.
+async function forwardToOffscreen(type) {
+  if (!(await hasOffscreenDocument())) return reconcileRecordingState();
+  const reply = await sendToOffscreen({ type });
+  if (reply?.snapshot) await writeRecordingState(reply.snapshot);
+  return reply;
+}
+
+// Sem documento offscreen nao ha gravacao em curso: se o estado guardado diz o contrario
+// (o documento caiu), volta para "idle" em vez de mostrar um cronometro que nao grava nada.
+async function reconcileRecordingState() {
+  const stored = await readRecordingState();
+  if (stored.status === 'idle') return { ok: true, snapshot: stored };
+  const snapshot = { ...IDLE_RECORDING, result: stored.result || null };
+  await writeRecordingState(snapshot);
+  return { ok: true, snapshot };
+}
+
+async function startRecording(message) {
+  if (!message.patientId || !message.consultationId) return { ok: false, error: 'invalid' };
+  await ensureOffscreenDocument();
+  const reply = await sendToOffscreen({
+    type: 'start',
+    patientId: message.patientId,
+    consultationId: message.consultationId,
+  });
+  if (reply?.ok) {
+    await writeRecordingState(reply.snapshot);
+  } else if (reply?.error !== 'already_recording') {
+    await closeOffscreenDocument(); // microfone negado: nada para manter aberto
+  }
+  return reply || { ok: false, error: 'offscreen_error' };
+}
+
+async function handleRecordingMessage(message) {
+  switch (message.type) {
+    // --- do documento offscreen ---
+    case 'recording:state':
+      await writeRecordingState(message.snapshot);
+      // "idle" = gravacao encerrada (o resultado ja esta no estado): libera o documento.
+      if (message.snapshot.status === 'idle') await closeOffscreenDocument();
+      return { ok: true };
+    case 'recording:get-token': {
+      // Documentos offscreen nao tem acesso ao chrome.storage: o token e pedido aqui a cada
+      // envio, entao um novo login vale tambem para as partes que aguardam reenvio.
+      const session = await chrome.storage.session.get([TOKEN_KEY]);
+      return { ok: true, token: session[TOKEN_KEY] || null };
+    }
+
+    // --- do popup ---
+    case 'recording:start':
+      return startRecording(message);
+    case 'recording:pause':
+      return forwardToOffscreen('pause');
+    case 'recording:resume':
+      return forwardToOffscreen('resume');
+    case 'recording:stop':
+      return forwardToOffscreen('stop');
+    case 'recording:sync':
+      return forwardToOffscreen('get-state');
+    case 'recording:cancel':
+      if (await hasOffscreenDocument()) {
+        await sendToOffscreen({ type: 'cancel' }).catch(() => {});
+        await closeOffscreenDocument();
+      }
+      await writeRecordingState(IDLE_RECORDING);
+      return { ok: true, snapshot: IDLE_RECORDING };
+    case 'recording:ack-result': {
+      // O popup ja entregou a transcricao ao chat: o resultado sai da memoria.
+      const snapshot = { ...(await readRecordingState()), result: null };
+      await writeRecordingState(snapshot);
+      return { ok: true, snapshot };
+    }
+    default:
+      return { ok: false, error: 'unknown_command' };
+  }
+}
+
+// So paginas da propria extensao (popup e offscreen) comandam a gravacao e recebem o token.
+// O content script roda dentro das paginas visitadas e chega aqui com a origem delas.
+function isExtensionPage(sender) {
+  if (sender.id !== chrome.runtime.id) return false;
+  const origin = sender.origin || (sender.url ? new URL(sender.url).origin : null);
+  return origin === new URL(chrome.runtime.getURL('')).origin;
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.target !== 'background') return;
+  if (!isExtensionPage(sender)) {
+    sendResponse({ ok: false, error: 'forbidden' });
+    return;
+  }
+  handleRecordingMessage(message).then(sendResponse, (error) => {
+    console.error('Erro ao tratar comando de gravacao:', error);
+    sendResponse({ ok: false, error: 'background_error' });
+  });
+  return true; // resposta assincrona
+});

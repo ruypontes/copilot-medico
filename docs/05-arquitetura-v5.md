@@ -34,8 +34,9 @@ src/
   shared/         ui, hooks, formatSoapForPep.ts
 public/
   manifest.json   host_permissions restritos aos PEPs; content.js só nesses domínios
+  offscreen.html  documento offscreen: grava e envia o áudio em partes com o popup fechado
   content.js      registra adaptadores, botão flutuante, ponte de mensagens
-  background.js   fila offline, alarmes, sincronização
+  background.js   fila offline, alarmes, sincronização; cria o offscreen e guarda o estado da gravação
 ```
 
 Regras: nenhum componente acima de 300 linhas; `App.tsx` só compõe; lógica de PEP não conhece React; lógica de API não conhece DOM.
@@ -76,6 +77,7 @@ erDiagram
     PACIENTE ||--o{ CONSULTA : tem
     CONSULTA ||--o{ MENSAGEM : contem
     CONSULTA ||--o{ TRANSCRICAO : gera
+    CONSULTA ||--o{ PARTE_AUDIO : aguarda
     CONSULTA ||--o{ DOCUMENTO_SOAP : produz
     CONSULTA ||--o| CONSENTIMENTO : registra
     PACIENTE ||--|| PSEUDONIMO : mapeia
@@ -121,6 +123,15 @@ erDiagram
         float duracao_s
         float wer_estimado
     }
+    PARTE_AUDIO {
+        uuid id
+        uuid consulta_id
+        string gravacao_id "gerado pela extensão a cada gravação"
+        int seq "único por consulta + gravação"
+        text caminho "arquivo temporário; apagado na transcrição"
+        float duracao_s
+        datetime criado_em
+    }
     DOCUMENTO_SOAP {
         uuid id
         uuid consulta_id
@@ -149,8 +160,8 @@ erDiagram
 | POST | `/api/consultations/<id>/pep-import` | {pep_origem, source_url?, created_at?, campos: {peso, …, anamnese, …}} | resumo do que foi registrado (nomes dos campos, nunca o conteúdo) |
 | POST | `/api/consultations/<id>/messages` | texto | resposta do LLM (reidratada) |
 | POST | `/api/consultations/<id>/pdf` | multipart pdf | resumo + resposta |
-| POST | `/api/consultations/<id>/audio/chunks` | multipart wav, seq | 202 |
-| POST | `/api/consultations/<id>/transcribe` | provedor? | transcrição com turnos |
+| POST | `/api/consultations/<id>/audio/chunks` | multipart `audio_file` (wav ≤ 5 min), `recording_id`, `seq` | 202 `{seq, duration, replaced, received[]}`; reenviar a mesma `seq` substitui a parte |
+| POST | `/api/consultations/<id>/transcribe` | `recording_id`, `total_chunks?`, provedor? | transcrição com turnos + `chunks {received, missing, failed}`; apaga o áudio das partes |
 | POST | `/api/consultations/<id>/recommendations` | janela_min? | itens[] |
 | POST | `/api/consultations/<id>/soap` | — | `SoapV1` (versao_ia) |
 | PUT | `/api/consultations/<id>/soap/<sid>` | versao_medico, status | SOAP |

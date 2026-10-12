@@ -9,6 +9,7 @@ from .anonimizacao import MapaAnonimizacaoRepository
 from .consultas import ConsultaRepository, MensagemRepository
 from .medicos import MedicoRepository
 from .pacientes import MedicoNaoEncontrado, PacienteRepository
+from .partes_audio import ParteAudioRepository
 from .registros import DadoExtensaoRepository, TranscricaoRepository
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "MedicoRepository",
     "MensagemRepository",
     "PacienteRepository",
+    "ParteAudioRepository",
     "TranscricaoRepository",
     "sessao",
 ]

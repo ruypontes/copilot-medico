@@ -22,6 +22,8 @@ TABELAS = {
     "transcricao", "documento_soap", "consentimento", "dado_extensao",
     # B26: mapa token -> valor real por consulta, cifrado (US016-CA002).
     "mapa_anonimizacao",
+    # B30: partes (chunks) de audio aguardando transcricao (US017-CA003).
+    "parte_audio",
 }
 
 
