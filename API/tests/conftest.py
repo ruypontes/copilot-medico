@@ -232,6 +232,7 @@ def env_for_config(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "dummy-key")
     monkeypatch.setenv("AUTH_SECRET_KEY", "test-secret-key")
     monkeypatch.setenv("CORS_ORIGINS", "*")
+    monkeypatch.setenv("TRANSCRIPTION_PROVIDER", "")
     yield
 
 

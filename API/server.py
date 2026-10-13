@@ -46,6 +46,7 @@ from repositories import (
 )
 from backend.processador_voz.processador_voz import TranscritorVoz
 from backend.audio_service import Diarizador
+from backend.transcription import obter_provedor
 
 
 def get_cors_origins():
@@ -187,6 +188,11 @@ except Exception as e:
     print(f"⚠️ AVISO: Falha ao carregar Diarizador: {e}")
     print("   -> O sistema funcionará apenas com Transcrição Simples.")
     audio_processor = None
+
+# Provedor escolhido no .env (TRANSCRIPTION_PROVIDER); None = Diarizador acima.
+transcription_provider = obter_provedor()
+if transcription_provider:
+    print(f"✅ Provedor de transcrição: {transcription_provider.nome}")
 
 
 def _json_error(message, status_code):
@@ -553,18 +559,20 @@ def transcribe_audio_route():
         # 3. Processamento (Tentativa de Diarização Inteligente)
         processed_successfully = False
 
-        if audio_processor:
+        processador = transcription_provider or audio_processor
+        if processador:
             try:
-                print("[TRANSCRIÇÃO] Iniciando Diarização (Vosk + Google)...")
-                # Aqui chamamos sua classe Diarizador
-                result = audio_processor.processar_audio(tmp_path)
+                print(f"[TRANSCRIÇÃO] Iniciando com {getattr(processador, 'nome', '') or 'Diarizador (Vosk + Google)'}...")
+                # Provedor do .env ou Diarizador: mesmo contrato de retorno
+                result = processador.processar_audio(tmp_path)
 
                 texto_final = result['full_text']
                 dialogue_structure = result['dialogue']  # Estrutura JSON rica (Médico/Paciente)
 
-                # Se a duração veio 0 do front, tentamos estimar (opcional, mas o Vosk não retorna duration total fácil)
+                # Se a duração veio 0 do front, usa a do provedor ou o fim do último segmento
+                if final_duration == 0:
+                    final_duration = result.get('duration') or 0
                 if final_duration == 0 and dialogue_structure:
-                    # Pega o fim do último segmento como duração aproximada
                     final_duration = dialogue_structure[-1].get('end', 0) if len(dialogue_structure) > 0 else 0
 
                 processed_successfully = True
