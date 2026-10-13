@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # Partes de gravacoes nunca finalizadas sao apagadas depois deste prazo.
     audio_chunk_ttl_hours: int = 24
 
+    # Provedor de transcricao (ADR-04). Vazio mantem o Diarizador (Vosk +
+    # Google); "whisper" usa o Whisper via Groq e exige groq_api_key.
+    transcription_provider: str = ""
+    groq_api_key: str = ""
+    groq_whisper_model: str = "whisper-large-v3"
+
     model_config = SettingsConfigDict(
         env_file=(str(API_ENV_PATH), str(BACKEND_ENV_PATH)),
         extra="ignore",

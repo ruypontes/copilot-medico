@@ -56,6 +56,7 @@ from repositories import (
 )
 from backend.processador_voz.processador_voz import TranscritorVoz
 from backend.audio_service import Diarizador
+from backend.transcription import obter_provedor
 
 
 def get_cors_origins():
@@ -208,6 +209,11 @@ except Exception as e:
     print(f"⚠️ AVISO: Falha ao carregar Diarizador: {e}")
     print("   -> O sistema funcionará apenas com Transcrição Simples.")
     audio_processor = None
+
+# Provedor escolhido no .env (TRANSCRIPTION_PROVIDER); None = Diarizador acima.
+transcription_provider = obter_provedor()
+if transcription_provider:
+    print(f"✅ Provedor de transcrição: {transcription_provider.nome}")
 
 
 def _json_error(message, status_code):
@@ -600,16 +606,20 @@ FRASES_DE_AUDIO_INVALIDO = (
 def _transcrever_arquivo(caminho, duracao=0.0):
     """Transcreve um arquivo WAV e devolve (texto, turnos, duracao_s).
 
-    Tenta a diarizacao (Vosk + Google) quando os modelos estao carregados e
-    cai na transcricao simples, sem turnos, se ela falhar ou nao existir.
+    Usa o provedor do .env (TRANSCRIPTION_PROVIDER, B32) ou a diarizacao
+    (Vosk + Google) quando os modelos estao carregados e cai na transcricao simples, sem turnos, se ela falhar ou nao existir.
     Usado pela rota legada (audio inteiro) e pela transcricao por partes (B30).
     """
-    if audio_processor:
+    # Provedor escolhido no .env (B32) ou Diarizador: mesmo contrato de retorno
+    processador = transcription_provider or audio_processor
+    if processador:
         try:
-            print("[TRANSCRIÇÃO] Iniciando Diarização (Vosk + Google)...")
-            result = audio_processor.processar_audio(caminho)
+            print(f"[TRANSCRIÇÃO] Iniciando com {getattr(processador, 'nome', '') or 'Diarizador (Vosk + Google)'}...")
+            result = processador.processar_audio(caminho)
             turnos = result['dialogue']  # Estrutura JSON rica (Médico/Paciente)
-            # Sem duração informada, usa o fim do último segmento como aproximação
+            # Sem duração informada, usa a do provedor ou o fim do último segmento
+            if duracao == 0:
+                duracao = result.get('duration') or 0
             if duracao == 0 and turnos:
                 duracao = turnos[-1].get('end', 0)
             print("[TRANSCRIÇÃO] Diarização concluída com sucesso.")
