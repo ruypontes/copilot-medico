@@ -479,3 +479,74 @@ describe("gravação da consulta", () => {
     expect(fake.session).toEqual({});
   });
 });
+
+// A seleção de paciente/consulta fica em chrome.storage.local, que é do navegador e não da
+// conta. Estes casos cobrem o que acontece quando ela não vale para quem entrou.
+describe("seleção guardada que não vale mais", () => {
+  const DE_OUTRA_CONTA = {
+    patientId: "p9-de-outro-medico",
+    patientName: "Paciente De Outro Médico",
+    consultationId: "c9-de-outro-medico",
+    consultationTitle: "Consulta alheia",
+  };
+
+  it("paciente de outra conta não é restaurado, não é consultado na API e sai do storage", async () => {
+    Object.assign(fake.session, TOKEN);
+    Object.assign(fake.store, DE_OUTRA_CONTA);
+
+    render(<App />);
+
+    await screen.findByText("Bem-vindo! Selecione ou crie um paciente para começar.");
+    await waitFor(() => expect(fake.store.patientId).toBeUndefined());
+    expect(fake.store.consultationId).toBeUndefined();
+    expect(screen.queryByText(/Paciente De Outro Médico/)).toBeNull(); // o nome não vaza para a outra conta
+    expect(fake.chamadas.filter((c) => c.path.includes("p9-de-outro-medico"))).toEqual([]);
+    expect(screen.queryByRole("button", { name: "🎙️ Iniciar gravação" })).toBeNull();
+  });
+
+  it("falha ao carregar as consultas não vira opção selecionável", async () => {
+    fake.consultasStatus = 403;
+    Object.assign(fake.session, TOKEN);
+    Object.assign(fake.store, PACIENTE_SALVO);
+
+    const { container } = render(<App />);
+
+    await screen.findByText("Paciente: Fulano Teste");
+    await waitFor(() =>
+      expect(chamadasPara("GET", `/api/patients/${P1.id}/consultations`)).not.toHaveLength(0)
+    );
+    const seletorConsulta = container.querySelectorAll<HTMLSelectElement>("select.patient-select")[1];
+    await waitFor(() => expect(seletorConsulta.disabled).toBe(true));
+    expect(Array.from(seletorConsulta.options).map((o) => o.textContent)).toEqual(["Selecione uma Consulta"]);
+  });
+
+  it("consulta guardada que não existe é desfeita e não dá para gravar nela", async () => {
+    Object.assign(fake.session, TOKEN);
+    Object.assign(fake.store, { ...PACIENTE_SALVO, consultationId: "1791857915655", consultationTitle: "Erro de rede" });
+
+    const { container } = render(<App />);
+
+    await screen.findByText("Paciente: Fulano Teste");
+    await waitFor(() => expect(fake.store.consultationId).toBeUndefined());
+    const seletorConsulta = container.querySelectorAll<HTMLSelectElement>("select.patient-select")[1];
+    await waitFor(() => expect(seletorConsulta.value).toBe(""));
+    expect(fake.store.patientId).toBe(P1.id); // o paciente continua selecionado
+    await waitFor(() => expect(screen.queryByRole("button", { name: "🎙️ Iniciar gravação" })).toBeNull());
+    expect(comandosDeGravacao()).toEqual([]);
+  });
+
+  it("parte recusada pelo servidor aparece como erro durante a gravação", async () => {
+    gravacaoSalva({
+      status: "recording",
+      recordingId: "gravacao-teste-0001",
+      patientId: P1.id,
+      consultationId: "c1xxxxxxxx",
+      resumedAt: Date.now(),
+      chunksRejected: 1,
+    });
+
+    await abrirComPacienteSalvo();
+
+    await screen.findByText(/O servidor recusou 1 parte\(s\) do áudio/);
+  });
+});

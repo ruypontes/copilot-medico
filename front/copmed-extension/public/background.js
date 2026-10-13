@@ -105,6 +105,7 @@ const IDLE_RECORDING = {
   resumedAt: null,
   chunksSent: 0,
   chunksPending: 0,
+  chunksRejected: 0,
   warning: null,
   result: null,
 };
