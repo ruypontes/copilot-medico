@@ -59,6 +59,7 @@ function snapshot(): RecordingSnapshot {
     resumedAt: engine.resumedAt,
     chunksSent: upload.sent.length,
     chunksPending: upload.pending.length,
+    chunksRejected: upload.dropped.length,
     warning: upload.warning,
     result: null,
   };
@@ -159,7 +160,7 @@ async function finalize(recording: ActiveRecording): Promise<void> {
   await recording.uploader.flush();
   if (recording.cancelled) return;
 
-  const { sent } = recording.uploader.status;
+  const { sent, dropped } = recording.uploader.status;
   const result: RecordingResult = {
     recordingId: recording.recordingId,
     patientId: recording.patientId,
@@ -173,6 +174,10 @@ async function finalize(recording: ActiveRecording): Promise<void> {
 
   if (recording.totalChunks === 0) {
     result.error = "Gravação muito curta: nada foi enviado para transcrição.";
+  } else if (sent.length === 0 && dropped.length > 0) {
+    // O servidor respondeu e recusou (404/403...): não é problema de conexão.
+    result.error =
+      "O servidor recusou o áudio: a consulta não foi encontrada ou esta conta não tem acesso a ela. Selecione a consulta novamente e grave de novo.";
   } else if (sent.length === 0) {
     result.error = "Não foi possível enviar o áudio ao servidor. Verifique a conexão e grave novamente.";
   } else {

@@ -36,6 +36,7 @@ export const fake = {
   microfone: "granted" as PermissionState,
   authMeStatus: 200,
   pacientesStatus: 200, // 401 simula a sessao vencendo no meio do uso
+  consultasStatus: 200, // 403 simula um paciente que nao e da conta que entrou
   pacientes: [] as { id: string; name: string }[],
   consultas: {} as Record<string, Consulta[]>,
   historicos: {} as Record<string, Historico[]>,
@@ -81,6 +82,9 @@ function api(method: string, path: string, body: Record<string, unknown>) {
     if (method === "POST") {
       fake.consultas[pid] = [...(fake.consultas[pid] || []), { id: "c9novaaaaa", title: "Consulta nova", date: "2026-05-01" }];
       return resposta(200, { status: "success", consultation_id: "c9novaaaaa", consultation_title: "Consulta nova" });
+    }
+    if (fake.consultasStatus !== 200) {
+      return resposta(fake.consultasStatus, { status: "error", message: "Acesso negado ao paciente." });
     }
     return resposta(200, { status: "success", consultations: [...(fake.consultas[pid] || [])] });
   }
@@ -136,6 +140,7 @@ export function instalarFakes() {
   fake.microfone = "granted";
   fake.authMeStatus = 200;
   fake.pacientesStatus = 200;
+  fake.consultasStatus = 200;
   fake.pacientes = [P1, P2];
   fake.consultas = {
     [P1.id]: [

@@ -184,6 +184,7 @@ export function useAudioRecording({
     hasRecordedAudio,
     elapsedTime,
     pendingChunks: snapshot.chunksPending,
+    rejectedChunks: snapshot.chunksRejected,
     uploadWarning: snapshot.warning,
     notices,
     showRecordingHistory,

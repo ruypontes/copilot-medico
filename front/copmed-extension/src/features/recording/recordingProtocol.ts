@@ -64,6 +64,8 @@ export type RecordingSnapshot = {
   resumedAt: number | null;
   chunksSent: number;
   chunksPending: number;
+  /** Partes que o servidor recusou de vez (ex.: consulta inexistente ou sem acesso). */
+  chunksRejected: number;
   /** Por que há partes aguardando reenvio. */
   warning: "session_expired" | "upload_failed" | null;
   result: RecordingResult | null;
@@ -78,6 +80,7 @@ export const IDLE_SNAPSHOT: RecordingSnapshot = {
   resumedAt: null,
   chunksSent: 0,
   chunksPending: 0,
+  chunksRejected: 0,
   warning: null,
   result: null,
 };

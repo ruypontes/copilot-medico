@@ -20,6 +20,7 @@ export default function RecordingPanel({ recording }: { recording: Recording }) 
     hasRecordedAudio,
     elapsedTime,
     pendingChunks,
+    rejectedChunks,
     uploadWarning,
     notices,
     showRecordingHistory,
@@ -151,6 +152,13 @@ export default function RecordingPanel({ recording }: { recording: Recording }) 
                 {uploadWarning === "session_expired"
                   ? `⚠️ Sessão expirada: ${pendingChunks} parte(s) do áudio aguardando. Entre novamente para enviá-las.`
                   : `⚠️ ${pendingChunks} parte(s) do áudio aguardando reenvio. A gravação continua.`}
+              </div>
+            )}
+            {/* Recusa definitiva: continuar gravando não adianta, o áudio não está sendo guardado */}
+            {isActive && rejectedChunks > 0 && (
+              <div style={{ color: "#e66060", fontSize: "0.85em", fontWeight: "bold" }}>
+                ❌ O servidor recusou {rejectedChunks} parte(s) do áudio (consulta não encontrada ou
+                sem acesso). Pare a gravação e selecione a consulta novamente.
               </div>
             )}
             {hasRecordedAudio && !isActive && (
