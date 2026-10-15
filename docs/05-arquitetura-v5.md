@@ -251,6 +251,12 @@ Formato curto. Cada ADR ganha um arquivo em `docs/adr/` no repositório quando a
 **Contexto:** D‑21.
 **Decisão:** criar organização `copilot-medico` (ou similar) com repositório `copilot-medico`; importar o histórico da branch `develop` da Equipe 6 (que já contém o da Equipe 4). Owners: Dr. Rui + professor; alunos como maintainers do semestre.
 
+### ADR‑10 — Escopo do sistema gerenciador web (`front/copmed-web`)
+**Contexto:** o Grupo 2 (2026.1) entregou um web app React com login, pacientes, aprovação de médicos e cinco telas placeholder (D‑31). Decisão P10 pendente desde 09/10.
+**Decisão (PO, 15/10/2026):** a web **mantém apenas login, cadastro/listagem de pacientes e aprovação de médicos pelo admin**, integrados à mesma autenticação da API. As telas Agenda, Consulta, Atendimentos, Histórico e Ajustes e os cards fixos do Dashboard são removidos. Nenhum item novo de web entra no backlog até M4 além de manutenção.
+**Alternativas rejeitadas:** evoluir Consulta/Histórico na web (duplica o esforço com a extensão); congelar (perde o painel do admin, necessário para aprovar médicos).
+**Consequência:** a extensão continua o produto principal; a web é o painel administrativo e a visão do prontuário. Ver `docs/12`, P10.
+
 ## 7. Prompts (diretrizes)
 
 - Português do Brasil, persona "assistente de documentação clínica", nunca "diagnostica".

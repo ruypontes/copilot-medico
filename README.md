@@ -40,6 +40,7 @@ O produto **funciona como demo**, mas não como ferramenta de uso diário: banco
 | 08 | [LGPD e segurança](docs/08-lgpd-seguranca.md) | PO, dev responsável por privacidade |
 | 09 | [Qualidade, testes e avaliação](docs/09-qualidade-testes-avaliacao.md) | QA, devs |
 | 10 | [Riscos e decisões pendentes](docs/10-riscos-decisoes.md) | PO |
+| 12 | [Decisões do PO — 15/10/2026](docs/12-decisoes-po-2026-10-15.md) | Todos (resolve P1–P13 e fixa custeio em plataformas gratuitas) |
 | A | [Transcrições dos vídeos](docs/anexos/A-transcricoes-videos.md) | Referência |
 | B | [Inventário dos repositórios](docs/anexos/B-inventario-repositorios.md) | Referência |
 | C | [Documentação do Grupo 2 (2026.1)](docs/anexos/C-documentacao-grupo-2-2026-1.pdf) | Referência |
