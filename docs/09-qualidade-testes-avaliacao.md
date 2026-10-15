@@ -58,7 +58,7 @@ Herança: os 7 arquivos de teste da Equipe 6 são consertados na Sprint 1 (alvos
 | Alucinação de exame | menção a exame não presente no caso (lista fechada por caso) | 0 |
 | Referências inventadas | regex de URL/DOI/"PubMed" na saída | 0 |
 | Latência | p50 / p95 por rota | SOAP p95 ≤ 20 s |
-| Custo | tokens × preço + minutos de áudio × preço | ≤ R$ 0,50 / consulta de 20 min |
+| Custo equivalente | tokens × preço de tabela + minutos de áudio × preço de tabela (gasto real = R$ 0, free tier) | informativo; referência ≤ R$ 0,50 / consulta de 20 min |
 
 ### 3.3 Execução
 
