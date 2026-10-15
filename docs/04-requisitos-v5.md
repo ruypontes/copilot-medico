@@ -142,7 +142,7 @@ A numeração continua a do documento de 2025 para preservar rastreabilidade. O 
 | RNF03 | Disponibilidade local | Gravação e fila funcionam sem rede; sincroniza ao reconectar |
 | RNF04 | Portabilidade | Backend roda em Docker (Linux) e nativo em Windows/macOS com Python 3.11–3.12 |
 | RNF05 | Testabilidade | Cobertura backend ≥ 60 %; testes de front para adaptadores e formatação de SOAP |
-| RNF06 | Custo | ≤ R$ 0,50 por consulta de 20 min (transcrição + SOAP), medido no eval |
+| RNF06 | Custo | **R$ 0 no semestre** — só plataformas gratuitas até o primeiro contrato (`docs/12`, seção 0); o eval mede o *custo equivalente* por consulta de 20 min para o orçamento pós‑contrato (referência: ≤ R$ 0,50) |
 | RNF07 | Acessibilidade | Popup navegável por teclado; contraste AA; tema claro/escuro mantido |
 | RNF08 | Observabilidade | Logs estruturados (JSON) sem conteúdo clínico; métricas de latência por rota |
 
