@@ -1,0 +1,28 @@
+{
+  "id": "caso-02",
+  "queixa_principal": "Febre há 2 dias",
+  "transcricao": "Médico: Bom dia! Em que posso ajudar?\nPaciente: Bom dia, doutor. Estou com febre desde anteontem, uns 38,5, e com o corpo todo doendo.\nMédico: Entendi. A senhora teve calafrios também?\nPaciente: Tive, sim. E dor de cabeça leve, mas nada demais.\nMédico: Teve dor de garganta, tosse, coriza, falta de ar?\nPaciente: Não, nada disso.\nMédico: Dor para urinar, diarreia, vômito, alguma mancha na pele?\nPaciente: Também não.\nMédico: A senhora tem alguma doença, toma remédio contínuo, tem alergia a algum medicamento?\nPaciente: Não, nunca tive nada, não tomo remédio e não tenho alergia.\nMédico: Viajou nos últimos dias?\nPaciente: Não.\nMédico: Teve contato com alguém doente?\nPaciente: Uma colega de trabalho teve um resfriado semana passada, mas não sei se é isso.\nMédico: Vou examinar a senhora. [exame físico] Temperatura 38,2, coração 92, pressão 110 por 70, saturação 98. Bom estado geral, sem manchas na pele, garganta sem placas, pulmão limpo, barriga sem alterações, sem gânglios aumentados. Exame neurológico normal.\nMédico: Dona Ana, o quadro da senhora é de uma febre sem foco aparente, provavelmente de causa viral. Não vejo sinais de gravidade agora. Vou te orientar dipirona de um grama de seis em seis horas se tiver febre ou dor, beber bastante líquido, repousar. Se a febre não passar em dois ou três dias, a senhora volta. E se aparecer falta de ar, dor na barriga forte, vômito que não para, sangramento, sonolência ou pressão baixa, volta antes, tá bom?\nPaciente: Certo, doutor.\nMédico: Não vou pedir hemograma agora, tá? A avaliação clínica não mostra gravidade. No retorno, se a febre persistir, a gente pede.\nPaciente: Entendi, obrigada.\nMédico: Vou confirmar seus dados. Nome completo?\nPaciente: Ana Beatriz Oliveira Costa.\nMédico: Data de nascimento?\nPaciente: Dez de julho de 1998.\nMédico: CPF?\nPaciente: 98765432100.\nMédico: Telefone?\nPaciente: Oitenta e um, nove nove oito sete sete, seis cinco quatro três.\nMédico: E-mail?\nPaciente: ana.costa@outlook.com.\nMédico: Endereço?\nPaciente: Avenida Boa Viagem, 456, Apto 301, Boa Viagem, Recife-PE, CEP 51020-000.",
+  "gabarito_soap": {
+    "subjetivo": "Paciente do sexo feminino, 28 anos, refere febre há 2 dias com picos até 38,5°C, calafrios, mialgia e cefaleia holocraniana leve. Nega odinofagia, tosse, coriza, dispneia, disúria, diarreia, vômitos ou lesões cutâneas. Nega comorbidades, uso de medicação contínua e alergias. Nega viagens recentes. Relata contato com colega de trabalho com resfriado na semana anterior. Nega tabagismo e etilismo.",
+    "objetivo": "Ao exame: T axilar 38,2°C, FC 92 bpm, PA 110/70 mmHg, FR 16 irpm, SatO2 98% em ar ambiente. Bom estado geral, corada, hidratada, orientada, fácies de doença leve. Pele sem rash ou petéquias. Orofaringe sem exsudato ou hiperemia significativa. Ausculta pulmonar com murmúrio vesicular presente bilateralmente, sem ruídos adventícios. Abdome flácido, indolor à palpação, sem visceromegalias. Linfonodos cervicais, axilares e inguinais não palpáveis. Exame neurológico sumário sem alterações.",
+    "avaliacao": "Febre de origem indeterminada — CID-10 R50. Quadro sugestivo de síndrome viral inespecífica, sem foco infeccioso localizatório identificado ao exame. Sem sinais de alarme (sem dispneia, hipotensão, alteração do estado mental, petéquias, rigidez de nuca ou dor abdominal localizada). Diagnósticos diferenciais considerados: infecção viral respiratória leve, infecção do trato urinário (sem sintomas urinários), dengue (sem sinais de alarme, mas epidemiologia a considerar em Pernambuco), outras viroses exantemáticas (sem rash).",
+    "plano": "1. Sintomáticos: dipirona 1 g VO de 6/6h se febre ou dor (máx. 4 g/dia). 2. Hidratação oral abundante. 3. Repouso relativo. 4. Orientação de retorno em 48-72h se febre persistir, ou imediatamente se surgirem sinais de alarme (dispneia, dor abdominal intensa, vômitos persistentes, sangramento, sonolência, hipotensão). 5. Hemograma e outros exames não solicitados nesta consulta — decisão de aguardar evolução clínica, dada a ausência de sinais de gravidade. 6. Notificação de dengue não aplicável no momento (sem critérios), mas orientada vigilância."
+  },
+  "cid10_esperado": ["R50"],
+  "pendencias": [
+    "Hemograma, provas inflamatórias e sorologias não solicitados — decisão de aguardar evolução; a ser reavaliado no retorno se febre persistir.",
+    "Foco infeccioso não identificado ao exame — possibilidade de reavaliação em 48-72h.",
+    "Notificação compulsória de dengue não realizada (sem critérios no momento), mas deve ser reconsiderada se surgirem sinais ou se o quadro evoluir.",
+    "Data exata de retorno não agendada — foi orientação condicional (48-72h se febre persistir).",
+    "Teste rápido para dengue/influenza não realizado (não disponível na UBS ou não indicado no momento)."
+  ],
+  "pii_plantada": {
+    "nome_completo": ["Ana Beatriz Oliveira Costa", "Dona Ana"],
+    "cpf": ["98765432100"],
+    "telefone": ["Oitenta e um, nove nove oito sete sete, seis cinco quatro três"],
+    "email": ["ana.costa@outlook.com"],
+    "data_nascimento": ["Dez de julho de 1998"],
+    "endereco": ["Avenida Boa Viagem, 456, Apto 301, Boa Viagem, Recife-PE, CEP 51020-000"],
+    "cep": ["51020-000"]
+  }
+}

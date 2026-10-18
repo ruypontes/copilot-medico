@@ -1,0 +1,27 @@
+{
+  "id": "caso-03",
+  "queixa_principal": "Tosse seca persistente",
+  "transcricao": "Médico: Boa tarde! O que está acontecendo?\nPaciente: Boa tarde, doutor. É uma tosse seca que não passa, já tem umas três semanas.\nMédico: Três semanas. E como começou?\nPaciente: Começou depois de um resfriado que tive. Achei que ia passar, mas ficou.\nMédico: É uma tosse seca ou tem catarro?\nPaciente: Seca, sem catarro.\nMédico: Piora em algum momento do dia?\nPaciente: À noite e quando acordo, principalmente.\nMédico: Teve febre, perda de peso, suor à noite, falta de ar, sangue no escarro?\nPaciente: Nada disso, doutor.\nMédico: Dor no peito?\nPaciente: Não.\nMédico: O senhor fuma?\nPaciente: Fumo, uns dez cigarros por dia, há uns vinte anos.\nMédico: Tem alguma doença, toma remédio contínuo?\nPaciente: Não, nunca tive nada, não tomo remédio.\nMédico: Alergia a algum medicamento?\nPaciente: Não.\nMédico: Viajou recentemente?\nPaciente: Não.\nMédico: Vou examinar o senhor. [exame físico] Temperatura 36,5, coração 78, pressão 130 por 80, saturação 97. Garganta com leve vermelhidão, sem placas. Pulmão limpo, sem chiado. Coração normal. Sem inchaço nas pernas. Sem baqueteamento dos dedos.\nMédico: Seu José, o quadro é de uma tosse pós-infecciosa, que é comum depois de um resfriado e pode durar algumas semanas. Não vejo sinais de gravidade. Vou orientar hidratação, mel com limão, e se incomodar muito, a gente pode pensar em um xarope para tosse seca. O mais importante é o senhor parar de fumar — isso vai ajudar muito. Tem um grupo de tabagismo aqui na UBS, posso te encaminhar.\nPaciente: Vou pensar, doutor.\nMédico: Se a tosse passar de oito semanas, ou se aparecer sangue no escarro, falta de ar, febre que não passa, perda de peso ou suor à noite, o senhor volta antes, tá bom? Aí a gente pede um raio-x do tórax.\nPaciente: Entendido.\nMédico: Vou confirmar seus dados. Nome completo?\nPaciente: José Carlos Pereira Lima.\nMédico: Data de nascimento?\nPaciente: 02/02/1981.\nMédico: CPF?\nPaciente: 111.444.777-35.\nMédico: Telefone?\nPaciente: (81) 3333-4444.\nMédico: Endereço?\nPaciente: Rua da Aurora, 789, Santo Amaro, Recife-PE, CEP 50050-901.",
+  "gabarito_soap": {
+    "subjetivo": "Paciente do sexo masculino, 45 anos, tabagista (cerca de 10 cigarros/dia há 20 anos), refere tosse seca há 3 semanas, iniciada após quadro de resfriado. Tosse pior à noite e ao acordar, sem expectoração. Nega febre, calafrios, sudorese noturna, perda de peso, hemoptise, dispneia aos esforços ou em repouso, dor torácica. Nega comorbidades conhecidas (HAS, DM, asma). Nega uso de medicação contínua. Nega alergias. Nega viagens recentes.",
+    "objetivo": "Ao exame: T axilar 36,5°C, FC 78 bpm, PA 130/80 mmHg, FR 16 irpm, SatO2 97% em ar ambiente. Bom estado geral, corado, hidratado, orientado. Orofaringe com hiperemia leve, sem exsudato. Ausculta pulmonar com murmúrio vesicular presente bilateralmente, sem ruídos adventícios. Ausculta cardíaca com ritmo regular, sem sopros. Abdome sem alterações. Extremidades sem edema. Baqueteamento digital ausente.",
+    "avaliacao": "Tosse — CID-10 R05. Quadro compatível com tosse pós-infecciosa (pós-viral), sem sinais de alarme (sem hemoptise, perda de peso, febre persistente, dispneia, sudorese noturna). Tabagismo ativo é fator de risco relevante e deve ser abordado. Diagnósticos diferenciais considerados: asma tosse-variante (sem sibilância ou história prévia), DRGE (sem sintomas dispépticos), uso de IECA (não faz uso), bronquite crônica (tabagista, mas quadro agudo pós-viral), neoplasia pulmonar (sem sinais de alarme, mas tabagismo exige vigilância). Radiografia de tórax não realizada nesta consulta — critério de aguardar evolução, mas deve ser solicitada se tosse persistir > 8 semanas ou se surgirem sinais de alarme.",
+    "plano": "1. Sintomático: hidratação, mel com limão (orientação caseira), pode-se considerar dextrometorfano ou dropropizina se tosse seca incomodativa (não prescrito nesta consulta). 2. Aconselhamento antitabágico: orientação para cessação, oferecido encaminhamento ao grupo de tabagismo da UBS (pendente de confirmação de disponibilidade). 3. Retorno se tosse persistir > 8 semanas, ou imediatamente se surgirem sinais de alarme (hemoptise, dispneia, febre persistente, perda de peso, sudorese noturna). 4. Radiografia de tórax não solicitada agora — a ser solicitada se tosse > 8 semanas ou sinais de alarme. 5. Espirometria não solicitada (sem indicação no momento)."
+  },
+  "cid10_esperado": ["R05"],
+  "pendencias": [
+    "Radiografia de tórax não solicitada — a ser solicitada se tosse > 8 semanas ou sinais de alarme (decisão clínica documentada).",
+    "Espirometria não solicitada — sem indicação no momento, mas deve ser considerada se tosse persistir ou se houver sintomas respiratórios crônicos.",
+    "Aconselhamento antitabágico realizado, mas encaminhamento formal ao grupo de cessação não confirmado (pendente de verificação de disponibilidade na UBS).",
+    "Data exata de retorno não agendada — orientação condicional (retorno se tosse > 8 semanas ou sinais de alarme).",
+    "Investigação de causa específica (asma tosse-variante, DRGE) não realizada — a ser considerada se tosse persistir."
+  ],
+  "pii_plantada": {
+    "nome_completo": ["José Carlos Pereira Lima", "Seu José"],
+    "cpf": ["111.444.777-35"],
+    "telefone": ["(81) 3333-4444"],
+    "data_nascimento": ["02/02/1981"],
+    "endereco": ["Rua da Aurora, 789, Santo Amaro, Recife-PE, CEP 50050-901"],
+    "cep": ["50050-901"]
+  }
+}
