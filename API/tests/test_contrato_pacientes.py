@@ -492,6 +492,35 @@ def test_transcribe_audio_sem_fala_nao_grava(client, medico, paciente, monkeypat
     assert "log_entry" not in body
 
 
+def test_transcribe_audio_usa_provedor_do_env(client, medico, paciente, monkeypatch):
+    """B32: com TRANSCRIPTION_PROVIDER definido, a rota usa o provedor no lugar do Diarizador."""
+    server = importlib.import_module("server")
+
+    class _FakeWhisper:
+        nome = "whisper"
+
+        def processar_audio(self, caminho):
+            return {
+                "full_text": "Falante não identificado: Bom dia",
+                "dialogue": [{"role": "Falante não identificado", "role_key": "unknown",
+                              "text": "Bom dia", "speaker_id": None, "start": 0.0, "end": 65.0}],
+                "speakers_count": 1,
+                "duration": 65.0,
+            }
+
+    monkeypatch.setattr(server, "audio_processor", _FakeAudioProcessor())
+    monkeypatch.setattr(server, "transcription_provider", _FakeWhisper())
+    pid, cid = paciente
+    resp = client.post("/api/transcribe_audio", data={
+        "audio_file": _audio(), "patient_id": pid, "consultation_id": cid,
+    }, content_type="multipart/form-data", headers=medico)
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["transcription"] == "Falante não identificado: Bom dia"
+    assert body["log_entry"]["dialogue"][0]["role_key"] == "unknown"
+    assert body["log_entry"]["duration"] == "1:05"
+
+
 def test_transcribe_audio_without_file_400(client, medico):
     resp = client.post("/api/transcribe_audio", data={"patient_id": "x"},
                        content_type="multipart/form-data", headers=medico)

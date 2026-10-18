@@ -61,12 +61,23 @@ def _gemini(config) -> TranscriptionProvider | None:
 def obter_provedor(config=settings) -> TranscriptionProvider | None:
     """Provedor escolhido em TRANSCRIPTION_PROVIDER, ou None para o local.
 
-    Vazio ou "gemini": Gemini audio (padrao do PO, P1). "vosk": None, que
-    mantem o fluxo antigo da rota (Diarizador e transcricao simples).
+    Vazio ou "gemini": Gemini audio (padrao do PO, P1). "whisper": Whisper via
+    Groq (B32), alternativa para o eval. "vosk": None, que mantem o fluxo
+    antigo da rota (Diarizador e transcricao simples).
     """
     nome = (getattr(config, "transcription_provider", "") or "").strip().lower()
     if nome == "vosk":
         return None
-    if nome not in ("", "gemini"):
+    if nome == "whisper":
+        chave = getattr(config, "groq_api_key", "")
+        if chave:
+            from .whisper import WhisperGroqProvider
+
+            return WhisperGroqProvider(
+                api_key=chave,
+                modelo=getattr(config, "groq_whisper_model", "") or "whisper-large-v3",
+            )
+        print("⚠️ TRANSCRIPTION_PROVIDER=whisper sem GROQ_API_KEY; usando o provedor padrão.")
+    elif nome not in ("", "gemini"):
         print(f"⚠️ TRANSCRIPTION_PROVIDER desconhecido: {nome!r}; usando o provedor padrão.")
     return _gemini(config)

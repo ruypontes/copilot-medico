@@ -608,10 +608,10 @@ FRASES_DE_AUDIO_INVALIDO = (
 def _transcrever_arquivo(caminho, duracao=0.0):
     """Transcreve um arquivo WAV e devolve (texto, turnos, duracao_s).
 
-    Ordem: provedor do .env (Gemini audio, B31), Diarizador (Vosk + Google)
-    quando os modelos estao carregados e, se ambos falharem ou nao existirem,
-    a transcricao simples, sem turnos. Os dois primeiros seguem o mesmo
-    contrato (backend/transcription/provider.py).
+    Ordem: provedor do .env (Gemini audio, B31, ou Whisper, B32), Diarizador
+    (Vosk + Google) quando os modelos estao carregados e, se ambos falharem
+    ou nao existirem, a transcricao simples, sem turnos. Os dois primeiros
+    seguem o mesmo contrato (backend/transcription/provider.py).
     Usado pela rota legada (audio inteiro) e pela transcricao por partes (B30).
     """
     processadores = [p for p in (transcription_provider, audio_processor) if p]
