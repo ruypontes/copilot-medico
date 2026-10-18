@@ -28,6 +28,12 @@ _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+# Sem isto o server sobe com o Gemini audio (padrao do B31) e, com um API/.env
+# local preenchido, as rotas de transcricao chamariam o Google de verdade; os
+# testes injetam o provedor. Fica fora das fixtures porque `backend.config`
+# e importado ja na coleta (antes de qualquer monkeypatch).
+os.environ["TRANSCRIPTION_PROVIDER"] = "vosk"
+
 
 # ---------------------------------------------------------------------------
 # Stubs dos modulos pesados (audio / IA)

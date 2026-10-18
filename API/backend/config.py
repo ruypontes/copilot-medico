@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     # Partes de gravacoes nunca finalizadas sao apagadas depois deste prazo.
     audio_chunk_ttl_hours: int = 24
 
+    # Provedor de transcricao (ADR-04). Vazio ou "gemini" usa o Gemini audio
+    # com a mesma GEMINI_API_KEY (B31); "vosk" mantem o Diarizador local.
+    transcription_provider: str = ""
+    gemini_audio_model: str = "gemini-2.5-flash"
+
     model_config = SettingsConfigDict(
         env_file=(str(API_ENV_PATH), str(BACKEND_ENV_PATH)),
         extra="ignore",
