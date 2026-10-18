@@ -9,7 +9,8 @@ import urllib.error
 
 import pytest
 
-from backend.transcription import TranscriptionError, obter_provedor
+from backend.transcription import TranscriptionError, TranscriptionProvider, obter_provedor
+from backend.transcription.gemini_audio import GeminiAudioProvider
 from backend.transcription import whisper as whisper_mod
 from backend.transcription.whisper import WhisperGroqProvider
 
@@ -25,7 +26,8 @@ RESPOSTA_GROQ = {
 
 
 def _config(**valores):
-    base = {"transcription_provider": "", "groq_api_key": "", "groq_whisper_model": "whisper-large-v3"}
+    base = {"transcription_provider": "", "groq_api_key": "", "groq_whisper_model": "whisper-large-v3",
+            "gemini_api_key": "", "gemini_audio_model": ""}
     base.update(valores)
     return types.SimpleNamespace(**base)
 
@@ -59,8 +61,10 @@ def groq_falsa(monkeypatch):
 
 # ---------- escolha do provedor pelo .env ----------
 
-def test_sem_variavel_mantem_o_padrao():
-    assert obter_provedor(_config()) is None
+def test_sem_variavel_usa_o_gemini_e_nao_o_whisper():
+    """O padrao e o Gemini audio (B31); o Whisper so entra com a flag."""
+    provedor = obter_provedor(_config(gemini_api_key="g", groq_api_key="gsk_teste"))
+    assert isinstance(provedor, GeminiAudioProvider)
 
 
 def test_whisper_com_chave_seleciona_groq():
@@ -71,11 +75,23 @@ def test_whisper_com_chave_seleciona_groq():
 
 
 def test_whisper_sem_chave_volta_ao_padrao():
+    provedor = obter_provedor(_config(transcription_provider="whisper", gemini_api_key="g"))
+    assert isinstance(provedor, GeminiAudioProvider)
+
+
+def test_whisper_sem_nenhuma_chave_fica_no_diarizador():
     assert obter_provedor(_config(transcription_provider="whisper")) is None
 
 
 def test_provedor_desconhecido_volta_ao_padrao():
-    assert obter_provedor(_config(transcription_provider="xyz", groq_api_key="k")) is None
+    provedor = obter_provedor(_config(transcription_provider="xyz", groq_api_key="k", gemini_api_key="g"))
+    assert isinstance(provedor, GeminiAudioProvider)
+
+
+def test_mesmo_contrato_que_o_gemini():
+    """B32: Whisper e Gemini implementam a mesma interface do B31."""
+    assert issubclass(WhisperGroqProvider, TranscriptionProvider)
+    assert issubclass(GeminiAudioProvider, TranscriptionProvider)
 
 
 # ---------- contrato do provedor ----------

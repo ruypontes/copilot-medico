@@ -424,6 +424,74 @@ def test_transcribe_audio_success(client, medico, paciente, monkeypatch):
     assert body["transcription"]
 
 
+class _FakeGemini:
+    nome = "gemini"
+
+    def __init__(self, resultado=None, erro=None):
+        self.resultado = resultado
+        self.erro = erro
+
+    def processar_audio(self, caminho):
+        if self.erro:
+            raise self.erro
+        return self.resultado
+
+
+_TURNOS_GEMINI = [
+    {"role": "Médico", "role_key": "doctor", "text": "Bom dia", "speaker_id": 0, "start": 0.0, "end": 2.0},
+    {"role": "Paciente", "role_key": "patient", "text": "Estou com febre", "speaker_id": 1,
+     "start": 2.0, "end": 65.0},
+]
+
+
+def test_transcribe_audio_usa_o_provedor_padrao(client, medico, paciente, monkeypatch):
+    """B31: com o provedor configurado, a rota grava os turnos marcados por ele."""
+    server = importlib.import_module("server")
+    monkeypatch.setattr(server, "audio_processor", _FakeAudioProcessor())
+    monkeypatch.setattr(server, "transcription_provider", _FakeGemini({
+        "full_text": "Médico: Bom dia\nPaciente: Estou com febre",
+        "dialogue": _TURNOS_GEMINI, "speakers_count": 2, "duration": 65.0,
+    }))
+    pid, cid = paciente
+    resp = client.post("/api/transcribe_audio", data={
+        "audio_file": _audio(), "patient_id": pid, "consultation_id": cid,
+    }, content_type="multipart/form-data", headers=medico)
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["is_error"] is False
+    assert body["transcription"] == "Médico: Bom dia\nPaciente: Estou com febre"
+    assert [t["role_key"] for t in body["log_entry"]["dialogue"]] == ["doctor", "patient"]
+    assert body["log_entry"]["duration"] == "1:05"
+
+
+def test_transcribe_audio_provedor_falha_cai_no_diarizador(client, medico, paciente, monkeypatch):
+    """B31: erro do Gemini (cota, rede) nao derruba a rota; o Diarizador assume."""
+    server = importlib.import_module("server")
+    monkeypatch.setattr(server, "audio_processor", _FakeAudioProcessor())
+    monkeypatch.setattr(server, "transcription_provider", _FakeGemini(erro=RuntimeError("429")))
+    pid, cid = paciente
+    resp = client.post("/api/transcribe_audio", data={
+        "audio_file": _audio(), "patient_id": pid, "consultation_id": cid,
+    }, content_type="multipart/form-data", headers=medico)
+    assert resp.status_code == 200
+    assert resp.get_json()["transcription"] == "Paciente relata dor de cabeca"
+
+
+def test_transcribe_audio_sem_fala_nao_grava(client, medico, paciente, monkeypatch):
+    server = importlib.import_module("server")
+    monkeypatch.setattr(server, "transcription_provider", _FakeGemini({
+        "full_text": "", "dialogue": [], "speakers_count": 0, "duration": 0.0,
+    }))
+    pid, cid = paciente
+    resp = client.post("/api/transcribe_audio", data={
+        "audio_file": _audio(), "patient_id": pid, "consultation_id": cid,
+    }, content_type="multipart/form-data", headers=medico)
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["is_error"] is True
+    assert "log_entry" not in body
+
+
 def test_transcribe_audio_usa_provedor_do_env(client, medico, paciente, monkeypatch):
     """B32: com TRANSCRIPTION_PROVIDER definido, a rota usa o provedor no lugar do Diarizador."""
     server = importlib.import_module("server")

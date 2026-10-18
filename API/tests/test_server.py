@@ -133,3 +133,5 @@ def test_health_endpoint_is_public(client):
     assert body["status"] == "success"
     assert body["service"] == "copilot-medico-api"
     assert "diarizer_loaded" in body
+    # TRANSCRIPTION_PROVIDER=vosk no conftest: nenhum provedor externo (B31)
+    assert body["transcription_provider"] is None

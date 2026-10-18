@@ -26,6 +26,8 @@ export type SelectionParams = {
   loadConsultationHistory: (pId: string, cId: string) => Promise<void>;
 };
 
+const SELECTION_KEYS = ["patientId", "patientName", "consultationId", "consultationTitle"];
+
 // Pacientes do médico: lista, seleção (abre a consulta mais recente) e criação.
 export function usePatients({
   setPatientId,
@@ -43,37 +45,51 @@ export function usePatients({
 
   // --- Funções de Carregamento e Persistência ---
 
-  const loadPatientDataFromStorage = useCallback(() => {
-    chrome.storage.local.get(
-      ["patientId", "patientName", "consultationId", "consultationTitle"],
-      (result) => {
-        if (result.patientId) {
-          setPatientId(result.patientId);
-          setPatientName(result.patientName || null);
-          setConsultationId(result.consultationId || null);
-          setConsultationTitle(result.consultationTitle || null);
+  // Restaura o paciente/consulta abertos da última vez. A seleção fica guardada no navegador,
+  // não na conta: se o paciente não está na lista de quem entrou agora (outro médico usou
+  // este navegador), ela é descartada — restaurá-la mostraria o nome de um paciente alheio e
+  // toda chamada seguinte responderia "Acesso negado ao paciente".
+  // `patients` é null quando a lista não pôde ser carregada: sem como conferir, restaura.
+  const loadPatientDataFromStorage = useCallback(
+    (patients: PatientListItem[] | null) => {
+      chrome.storage.local.get(SELECTION_KEYS, (result) => {
+        if (!result.patientId) return;
+        if (patients && !patients.some((patient) => patient.id === result.patientId)) {
+          chrome.storage.local.remove(SELECTION_KEYS);
+          return;
         }
-      }
-    );
-  }, [setPatientId, setPatientName, setConsultationId, setConsultationTitle]);
+        setPatientId(result.patientId);
+        setPatientName(result.patientName || null);
+        setConsultationId(result.consultationId || null);
+        setConsultationTitle(result.consultationTitle || null);
+      });
+    },
+    [setPatientId, setPatientName, setConsultationId, setConsultationTitle]
+  );
 
-  const fetchAllPatients = useCallback(async () => {
+  const fetchAllPatients = useCallback(async (): Promise<PatientListItem[] | null> => {
     try {
       const data = await getPatients();
       if (data.status === "success") {
         setAllPatients(data.patients);
-      } else {
-        console.error("Erro ao buscar todos os pacientes:", data.message);
+        return data.patients;
       }
+      console.error("Erro ao buscar todos os pacientes:", data.message);
     } catch (error) {
       console.error("Erro de rede ao buscar todos os pacientes:", error);
     }
+    return null;
   }, []);
 
-  // Carrega dados do paciente e todas as listas de pacientes na inicialização
+  // Na inicialização: carrega a lista de pacientes e só então restaura a seleção guardada
   useEffect(() => {
-    loadPatientDataFromStorage();
-    fetchAllPatients();
+    let active = true;
+    fetchAllPatients().then((patients) => {
+      if (active) loadPatientDataFromStorage(patients);
+    });
+    return () => {
+      active = false;
+    };
   }, [loadPatientDataFromStorage, fetchAllPatients]);
 
   // --- Handlers de Ação ---

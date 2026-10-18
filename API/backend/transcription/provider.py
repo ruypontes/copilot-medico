@@ -10,6 +10,9 @@ Diarizador (backend/audio_service.py), que e o que a rota
         "speakers_count": int,
         "duration": float,   # segundos; 0 quando o provedor nao informa
     }
+
+Falha do provedor (rede, cota, resposta invalida) levanta TranscriptionError;
+a rota entao cai no Diarizador local e, por fim, na transcricao simples.
 """
 from abc import ABC, abstractmethod
 
@@ -42,23 +45,39 @@ def montar_resultado(turnos: list[dict], duracao: float = 0.0) -> dict:
     }
 
 
-def obter_provedor(config=settings) -> TranscriptionProvider | None:
-    """Provedor escolhido em TRANSCRIPTION_PROVIDER, ou None para o padrao.
+def _gemini(config) -> TranscriptionProvider | None:
+    chave = getattr(config, "gemini_api_key", "")
+    if not chave:
+        print("⚠️ Gemini áudio sem GEMINI_API_KEY; usando o Diarizador local.")
+        return None
+    from .gemini_audio import GeminiAudioProvider
 
-    None mantem o fluxo antigo da rota (Diarizador e transcricao simples).
+    return GeminiAudioProvider(
+        api_key=chave,
+        modelo=getattr(config, "gemini_audio_model", "") or None,
+    )
+
+
+def obter_provedor(config=settings) -> TranscriptionProvider | None:
+    """Provedor escolhido em TRANSCRIPTION_PROVIDER, ou None para o local.
+
+    Vazio ou "gemini": Gemini audio (padrao do PO, P1). "whisper": Whisper via
+    Groq (B32), alternativa para o eval. "vosk": None, que mantem o fluxo
+    antigo da rota (Diarizador e transcricao simples).
     """
-    nome = (config.transcription_provider or "").strip().lower()
-    if not nome:
+    nome = (getattr(config, "transcription_provider", "") or "").strip().lower()
+    if nome == "vosk":
         return None
     if nome == "whisper":
-        if not config.groq_api_key:
-            print("⚠️ TRANSCRIPTION_PROVIDER=whisper sem GROQ_API_KEY; usando o provedor padrão.")
-            return None
-        from .whisper import WhisperGroqProvider
+        chave = getattr(config, "groq_api_key", "")
+        if chave:
+            from .whisper import WhisperGroqProvider
 
-        return WhisperGroqProvider(
-            api_key=config.groq_api_key,
-            modelo=config.groq_whisper_model,
-        )
-    print(f"⚠️ TRANSCRIPTION_PROVIDER desconhecido: {nome!r}; usando o provedor padrão.")
-    return None
+            return WhisperGroqProvider(
+                api_key=chave,
+                modelo=getattr(config, "groq_whisper_model", "") or "whisper-large-v3",
+            )
+        print("⚠️ TRANSCRIPTION_PROVIDER=whisper sem GROQ_API_KEY; usando o provedor padrão.")
+    elif nome not in ("", "gemini"):
+        print(f"⚠️ TRANSCRIPTION_PROVIDER desconhecido: {nome!r}; usando o provedor padrão.")
+    return _gemini(config)

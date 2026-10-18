@@ -210,7 +210,8 @@ except Exception as e:
     print("   -> O sistema funcionará apenas com Transcrição Simples.")
     audio_processor = None
 
-# Provedor escolhido no .env (TRANSCRIPTION_PROVIDER); None = Diarizador acima.
+# Provedor do .env (TRANSCRIPTION_PROVIDER, B31): Gemini audio por padrao.
+# None ("vosk" ou sem chave) deixa so o Diarizador acima.
 transcription_provider = obter_provedor()
 if transcription_provider:
     print(f"✅ Provedor de transcrição: {transcription_provider.nome}")
@@ -364,6 +365,7 @@ def health_check():
         "status": "success",
         "service": "copilot-medico-api",
         "diarizer_loaded": audio_processor is not None,
+        "transcription_provider": getattr(transcription_provider, "nome", None),
     }), 200
 
 
@@ -606,26 +608,31 @@ FRASES_DE_AUDIO_INVALIDO = (
 def _transcrever_arquivo(caminho, duracao=0.0):
     """Transcreve um arquivo WAV e devolve (texto, turnos, duracao_s).
 
-    Usa o provedor do .env (TRANSCRIPTION_PROVIDER, B32) ou a diarizacao
-    (Vosk + Google) quando os modelos estao carregados e cai na transcricao simples, sem turnos, se ela falhar ou nao existir.
+    Ordem: provedor do .env (Gemini audio, B31, ou Whisper, B32), Diarizador
+    (Vosk + Google) quando os modelos estao carregados e, se ambos falharem
+    ou nao existirem, a transcricao simples, sem turnos. Os dois primeiros
+    seguem o mesmo contrato (backend/transcription/provider.py).
     Usado pela rota legada (audio inteiro) e pela transcricao por partes (B30).
     """
-    # Provedor escolhido no .env (B32) ou Diarizador: mesmo contrato de retorno
-    processador = transcription_provider or audio_processor
-    if processador:
+    processadores = [p for p in (transcription_provider, audio_processor) if p]
+    for processador in processadores:
+        nome = getattr(processador, 'nome', '') or 'Diarizador (Vosk + Google)'
         try:
-            print(f"[TRANSCRIÇÃO] Iniciando com {getattr(processador, 'nome', '') or 'Diarizador (Vosk + Google)'}...")
+            print(f"[TRANSCRIÇÃO] Iniciando com {nome}...")
             result = processador.processar_audio(caminho)
             turnos = result['dialogue']  # Estrutura JSON rica (Médico/Paciente)
+            if not result['full_text'].strip():
+                # Audio sem fala: mesmo aviso da transcricao simples
+                return FRASES_DE_AUDIO_INVALIDO[0] + ".", None, duracao
             # Sem duração informada, usa a do provedor ou o fim do último segmento
             if duracao == 0:
                 duracao = result.get('duration') or 0
             if duracao == 0 and turnos:
                 duracao = turnos[-1].get('end', 0)
-            print("[TRANSCRIÇÃO] Diarização concluída com sucesso.")
+            print(f"[TRANSCRIÇÃO] {nome} concluído com sucesso.")
             return result['full_text'], turnos, duracao
         except Exception as e:
-            print(f"❌ Erro na Diarização: {e}. Tentando fallback simples...")
+            print(f"❌ Erro em {nome}: {e}. Tentando o próximo...")
 
     print("[TRANSCRIÇÃO] Usando Transcritor Simples (Legacy)...")
     transcritor = TranscritorVoz(idioma="pt-BR")

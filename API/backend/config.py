@@ -45,9 +45,11 @@ class Settings(BaseSettings):
     # Partes de gravacoes nunca finalizadas sao apagadas depois deste prazo.
     audio_chunk_ttl_hours: int = 24
 
-    # Provedor de transcricao (ADR-04). Vazio mantem o Diarizador (Vosk +
-    # Google); "whisper" usa o Whisper via Groq e exige groq_api_key.
+    # Provedor de transcricao (ADR-04). Vazio ou "gemini" usa o Gemini audio
+    # com a mesma GEMINI_API_KEY (B31); "whisper" usa o Whisper via Groq e
+    # exige groq_api_key (B32); "vosk" mantem o Diarizador local.
     transcription_provider: str = ""
+    gemini_audio_model: str = "gemini-2.5-flash"
     groq_api_key: str = ""
     groq_whisper_model: str = "whisper-large-v3"
 

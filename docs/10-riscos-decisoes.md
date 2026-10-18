@@ -20,23 +20,25 @@
 
 Revisão dos riscos: a cada retrospectiva, o SM atualiza probabilidade/impacto e adiciona novos.
 
-## Decisões pendentes do cliente
+## Decisões do cliente — resolvidas em 15/10/2026
 
-Cada item tem uma **recomendação**, que vale automaticamente se não houver resposta em 72 h após a Sprint 0 (regra do doc 07).
+Todas as decisões abaixo foram tomadas pelo PO em **[docs/12-decisoes-po-2026-10-15.md](12-decisoes-po-2026-10-15.md)**, que traz as três opções consideradas em cada ponto, a escolhida e o motivo. Resumo:
 
-| # | Decisão | Opções | Recomendação | Prazo |
-|---|---|---|---|---|
-| P1 | Provedor de transcrição pago | (a) Gemini áudio — mesma chave, marcação de falantes; (b) Whisper large‑v3 via Groq — melhor WER em PT‑BR, chave nova; (c) Whisper local — precisa GPU | **DECIDIDO 15/09/2026: (a) Gemini áudio.** Whisper/Groq entra só como comparação no eval, se sobrar tempo | — |
-| P2 | Quem paga as chaves de API durante o semestre | PO / disciplina / créditos gratuitos | PO fornece chave com limite mensal; equipe reporta custo no eval | 25/09 |
-| P3 | Segundo PEP além do Amplimed | e‑SUS PEC (público, Docker oficial) / iClinic / nenhum | **DECIDIDO 15/09/2026: e‑SUS PEC.** | — |
-| P4 | Futuro da trilha privada (Supabase/Vercel) | reativar em paralelo / congelar / migrar ideias para a v5.0 | **Congelar** durante o semestre; reavaliar em M4 com o eval em mãos | 09/10 |
-| P5 | Médicos do piloto | Dr. Rui + Dra. Lorena + convidados | Confirmar dois nomes e datas até a Sprint 4 | 20/11 |
-| P6 | Nome e owner do repositório único | organização `copilot-medico` / conta pessoal do PO | **DECIDIDO 15/09/2026:** repositório `ruypontes/copilot-medico` criado na conta do PO (privado). Em 20/09 a árvore do Grupo 2 foi integrada e a equipe começou a ser convidada. Resta transferir para uma organização com o professor como co‑owner e tornar público (branch protection só funciona em repositório público no plano gratuito) | 25/09 |
-| P7 | Cadastro de identificação do paciente | obrigatório / opcional / nunca | **Opcional** e cifrado (ADR‑03); padrão é só pseudônimo | 23/10 |
-| P8 | Exibir CID‑10 sugerido ao médico | sim / só a descrição | **Sim**, com confiança qualitativa e busca na tabela | 20/11 |
-| P9 | Vídeos finais gravados com qual PEP | Amplimed real (conta de teste) / PEC local | Ambos, 1 min cada | 15/01 |
-| P10 | Destino do sistema gerenciador web do Grupo 2 (`front/copmed-web`) | (a) manter só login, pacientes e aprovação de médicos, integrado à auth; (b) evoluir Consulta/Histórico na web em paralelo à extensão; (c) congelar | **Recomendação: (a)** — a extensão continua o produto principal; a web serve ao admin e à visão do prontuário. (b) só com ≥ 8 pessoas na equipe | 09/10 |
-| P11 | Pacientes legados sem médico (`doctor_id` nulo, D‑24) | atribuir ao primeiro médico aprovado / manter só para o admin / apagar o seed e recomeçar | **Recomendação:** apagar o seed "João Silva" e migrar os demais para o médico do piloto na migração de banco (B21/B68) | 09/10 |
+| # | Decisão | Resultado | Ação / prazo |
+|---|---|---|---|
+| P1 | Provedor de transcrição | **Gemini áudio** padrão; Whisper/Groq atrás de `TRANSCRIPTION_PROVIDER=whisper` | B31 primeiro item da S3; B32 por PR própria |
+| P2 | Custeio | **Plataformas gratuitas até o primeiro contrato** (AI Studio free, Groq free, GitHub público, Docker local); RNF06 = R$ 0 no semestre | README/.env.example até 23/10 |
+| P3 | Segundo PEP | **e‑SUS PEC** (entregue em Docker, PR #71, `docs/11`) | Adaptadores na S5 |
+| P4 | Trilha privada | **Congelada até M4**; código da ext. v2.3 só como referência | — |
+| P5 | Médicos do piloto | Meta: Rui + Dra. Lorena + médico de UBS; mínimo: Rui + Lorena | PO convida até 20/11 |
+| P6 | Repositório | **Público agora** na conta do PO; organização quando o professor confirmar | PO executa 16/10 + proteção de branches |
+| P7 | Identificação do paciente | **Opcional e cifrada** (B26) | — |
+| P8 | CID‑10 sugerido | **Sim**, confiança qualitativa + busca | — |
+| P9 | PEP dos vídeos | **Ambos**; só PEC se não houver conta Amplimed até a S6 | PO: conta até 23/11 |
+| P10 | Web app do Grupo 2 (#70) | **(a) manter login, pacientes e aprovação de médicos**; remover placeholders (D‑31) | ADR‑10 em `docs/05`; TL Front até 23/10 |
+| P11 | Pacientes legados | **Seed apagado, demais migrados** (B68) | Encerrado |
+| P12 | Ordem do áudio | **B31 antes de B32** | S3 |
+| P13 | Revisão sem proteção | **Autor nunca mescla a própria PR; 1 aprovação; `Closes #n`** | Vale hoje; CODEOWNERS após P6 |
 
 ## Próximo ciclo (registrar desde já)
 
