@@ -139,6 +139,10 @@ erDiagram
         json versao_medico
         string status "gerado | editado | aprovado | inserido_no_pep"
         datetime aprovado_em
+        string schema_versao "SoapV1"
+        string prompt_id
+        string prompt_versao
+        datetime atualizado_em
     }
     CONSENTIMENTO {
         uuid consulta_id
@@ -162,7 +166,7 @@ erDiagram
 | POST | `/api/consultations/<id>/pdf` | multipart pdf | resumo + resposta |
 | POST | `/api/consultations/<id>/audio/chunks` | multipart `audio_file` (wav ≤ 5 min), `recording_id`, `seq` | 202 `{seq, duration, replaced, received[]}`; reenviar a mesma `seq` substitui a parte |
 | POST | `/api/consultations/<id>/transcribe` | `recording_id`, `total_chunks?`, provedor? | transcrição com turnos + `chunks {received, missing, failed}`; apaga o áudio das partes |
-| POST | `/api/consultations/<id>/recommendations` | janela_min? | itens[] |
+| POST | `/api/recommendations` (B38; mantida a rota existente, US020-CA001) | patient_id, consultation_id, janela_min? (1–120, padrão 5) | itens[] {tipo, texto} (≤ 5, ≤ 20 palavras), janela_min, transcricoes_usadas |
 | POST | `/api/consultations/<id>/soap` | — | `SoapV1` (versao_ia) |
 | PUT | `/api/consultations/<id>/soap/<sid>` | versao_medico, status | SOAP |
 | GET | `/api/consultations/<id>/export?format=` | pdf \| md | arquivo |

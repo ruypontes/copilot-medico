@@ -206,6 +206,14 @@ def test_gerar_sem_schema_nem_instrucao():
     assert set(sdk.geracoes[0]["config"]) == {"safety_settings"}
 
 
+def test_gerar_em_json_sem_schema():
+    sdk = _sdk_falso()
+    _provedor(sdk).gerar("sugira", instrucao="so json", formato_json=True)
+    config = sdk.geracoes[0]["config"]
+    assert config["response_mime_type"] == "application/json"
+    assert "response_schema" not in config
+
+
 # ---------- send_message usado pelas rotas ----------
 
 def _chat_real():
@@ -240,6 +248,32 @@ def test_send_message_le_o_historico_e_chama_o_provedor(monkeypatch):
 
     assert chat.send_message("p1", "c1", "oi") == "resposta da IA"
     assert chamadas == [("c1", [_msg("user", "oi")], "oi")]
+
+
+def test_gerar_resposta_unica_pede_json_sem_historico(monkeypatch):
+    # Recomendacoes (B38): so a janela de transcricoes, sem o chat
+    chat = _chat_real()
+    sdk = _sdk_falso()
+    monkeypatch.setattr(chat, "obter_provedor", lambda: _provedor(sdk))
+
+    assert chat.gerar_resposta_unica("instrucao B38", "trecho") == '{"ok": true}'
+    chamada = sdk.geracoes[0]
+    assert chamada["contents"] == "trecho"
+    assert chamada["config"]["system_instruction"] == "instrucao B38"
+    assert chamada["config"]["response_mime_type"] == "application/json"
+    assert sdk.sessoes == []
+
+
+def test_gerar_resposta_unica_levanta_em_falha(monkeypatch):
+    chat = _chat_real()
+    monkeypatch.setattr(chat, "obter_provedor", lambda: None)
+    with pytest.raises(LlmError, match="GEMINI_API_KEY"):
+        chat.gerar_resposta_unica("i", "c")
+
+    sdk = _sdk_falso(erro=RuntimeError("cota"))
+    monkeypatch.setattr(chat, "obter_provedor", lambda: _provedor(sdk))
+    with pytest.raises(LlmError, match="cota"):
+        chat.gerar_resposta_unica("i", "c")
 
 
 def test_send_message_sem_chave_responde_com_erro(monkeypatch):

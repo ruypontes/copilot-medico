@@ -277,3 +277,17 @@ export function sendPepImport(consultationId: string, payload: Record<string, un
 export function getTranscriptionLog(patientId: string) {
   return apiRequest(`/api/patients/${encodeURIComponent(patientId)}/transcription-log`);
 }
+
+// B38: sugestões curtas sobre as transcrições dos últimos `janela_min` minutos.
+export type Suggestion = { tipo: string; texto: string };
+
+export function getRecommendations(payload: {
+  patient_id: string;
+  consultation_id: string;
+  janela_min: number;
+}) {
+  return apiRequest("/api/recommendations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}

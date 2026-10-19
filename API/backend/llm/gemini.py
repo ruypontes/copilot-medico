@@ -137,12 +137,14 @@ class GeminiProvider(LlmProvider):
                 self._sessoes.popitem(last=False)
         return texto_resposta
 
-    def gerar(self, prompt: str, instrucao: str | None = None, schema: dict | None = None) -> str:
+    def gerar(self, prompt: str, instrucao: str | None = None, schema: dict | None = None,
+              formato_json: bool = False) -> str:
         config = {"safety_settings": SEGURANCA}
         if instrucao:
             config["system_instruction"] = instrucao
-        if schema is not None:
+        if formato_json or schema is not None:
             config["response_mime_type"] = "application/json"
+        if schema is not None:
             config["response_schema"] = schema
         try:
             resposta = self._client().models.generate_content(

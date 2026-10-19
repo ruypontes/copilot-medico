@@ -6,8 +6,9 @@ Contrato:
   consulta. `historico` vem do MensagemRepository no formato
   {"role": "user"|"model", "parts": [{"text": ...}]} e pode ja terminar com
   a propria `texto`, que as rotas gravam antes de chamar o modelo.
-- `gerar(prompt, instrucao=None, schema=None)`: chamada avulsa, sem historico
-  (SOAP, B40). Com `schema`, o modelo responde JSON nesse formato.
+- `gerar(prompt, instrucao=None, schema=None, formato_json=False)`: chamada
+  avulsa, sem historico (recomendacoes do B38, SOAP do B40). Com
+  `formato_json` o modelo responde JSON; com `schema`, JSON nesse formato.
 
 Ambos devolvem texto. Falha do provedor (rede, cota, resposta bloqueada)
 levanta LlmError.
@@ -30,7 +31,8 @@ class LlmProvider(ABC):
         ...
 
     @abstractmethod
-    def gerar(self, prompt: str, instrucao: str | None = None, schema: dict | None = None) -> str:
+    def gerar(self, prompt: str, instrucao: str | None = None, schema: dict | None = None,
+              formato_json: bool = False) -> str:
         ...
 
 

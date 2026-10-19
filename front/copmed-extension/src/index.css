@@ -64,10 +64,33 @@
     border: #e66060 1px solid;
     color: #e66060;
   }
+  /* Sugestoes da consulta (B38) */
+  .suggestions-box {
+    background-color: #2f2a3d;
+    border: 1px solid #6b5a99;
+    color: #f3f0ff;
+  }
+  .suggestions-note {
+    color: #b9b4c7;
+  }
+  .suggestions-window select {
+    background-color: #374151;
+    color: #ffffff;
+    border: 1px solid #4b5563;
+  }
 }
 
 @media (prefers-color-scheme: light) {
   /* TEMA CLARO */
+  /* Sugestoes da consulta (B38) */
+  .suggestions-box {
+    background-color: #faf7ff;
+    border: 1px solid #d9c9f2;
+    color: #1f2937;
+  }
+  .suggestions-note {
+    color: #6b7280;
+  }
   :root {
     color: #565555;
     background-color: #dcdcdc;
