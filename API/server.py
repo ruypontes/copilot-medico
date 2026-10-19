@@ -976,6 +976,144 @@ def get_transcription_log_api(patient_id):
     except Exception as e:
         print(f"Erro ao buscar logs: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+@app.route(
+    '/api/patients/<patient_id>/transcription-log/<transcription_id>',
+    methods=['PATCH']
+)
+@roles_required("administrador", "medico")
+def update_transcription_roles_api(patient_id, transcription_id):
+    try:
+        # Verifica se o usuário autenticado pode acessar este paciente.
+        _patient_data, access_error = require_patient_access(patient_id)
+        if access_error:
+            return access_error
+
+        data = request.get_json(silent=True)
+
+        if not isinstance(data, dict):
+            return jsonify({
+                "status": "error",
+                "message": "Corpo JSON inválido."
+            }), 400
+
+        papeis = data.get("roles")
+
+        papeis_validos = {"Médico", "Paciente", "Outro"}
+
+        if (
+            not isinstance(papeis, list)
+            or not all(
+                isinstance(papel, str) and papel in papeis_validos
+                for papel in papeis
+            )
+        ):
+            return jsonify({
+                "status": "error",
+                "message": "Envie uma lista válida de papéis."
+            }), 400
+
+        transcricao = _transcricoes().atualizar_papeis(
+            patient_id,
+            transcription_id,
+            papeis,
+        )
+
+        if transcricao is None:
+            return jsonify({
+                "status": "error",
+                "message": "Transcrição não encontrada ou dados incompatíveis."
+            }), 404
+
+        return jsonify({
+            "status": "success",
+            "message": "Papéis atualizados com sucesso.",
+            "log": transcricao,
+        }), 200
+
+    except ValueError as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 400
+
+    except Exception as e:
+        print(f"Erro ao atualizar papéis da transcrição: {e}")
+        return jsonify({
+            "status": "error",
+            "message": "Erro interno ao atualizar a transcrição."
+        }), 500
+
+
+@app.route(
+    '/api/patients/<patient_id>/transcription-log/<transcription_id>/turns/<int:turn_index>',
+    methods=['PATCH']
+)
+@roles_required("administrador", "medico")
+def update_transcription_turn_role_api(
+    patient_id, transcription_id, turn_index
+):
+    try:
+        # Verifica se o usuário autenticado pode acessar este paciente.
+        _patient_data, access_error = require_patient_access(patient_id)
+        if access_error:
+            return access_error
+
+        data = request.get_json(silent=True)
+
+        if not isinstance(data, dict):
+            return jsonify({
+                "status": "error",
+                "message": "Corpo JSON inválido."
+            }), 400
+
+        role = data.get("role")
+        roles_validos = {"medico", "paciente", "outro"}
+
+        if not isinstance(role, str) or role not in roles_validos:
+            return jsonify({
+                "status": "error",
+                "message": "Envie um papel válido."
+            }), 400
+
+        transcricao = _transcricoes().atualizar_papel_turno(
+            patient_id,
+            transcription_id,
+            turn_index,
+            role,
+        )
+
+        if transcricao is None:
+            return jsonify({
+                "status": "error",
+                "message": "Transcrição ou turno não encontrado."
+            }), 404
+
+        return jsonify({
+            "status": "success",
+            "message": "Papel do turno atualizado com sucesso.",
+            "log": transcricao,
+        }), 200
+
+    except ValueError as e:
+        mensagem = str(e)
+
+        if mensagem == "Turno não encontrado.":
+            return jsonify({
+                "status": "error",
+                "message": mensagem,
+            }), 404
+
+        return jsonify({
+            "status": "error",
+            "message": mensagem,
+        }), 400
+
+    except Exception as e:
+        print(f"Erro ao atualizar papel do turno: {e}")
+        return jsonify({
+            "status": "error",
+            "message": "Erro interno ao atualizar o turno."
+        }), 500
 
 # NOVO ENDPOINT: Verificar existência do Patient ID
 @app.route('/api/patient-exists/<patient_id>', methods=['GET'])

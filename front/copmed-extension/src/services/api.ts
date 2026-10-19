@@ -307,3 +307,33 @@ export function getRecommendations(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+export function updateTranscriptionTurnRole(
+  patientId: string,
+  transcriptionId: string,
+  turnIndex: number,
+  role: "medico" | "paciente" | "outro"
+) {
+  return apiRequest(
+    `/api/patients/${encodeURIComponent(patientId)}/transcription-log/${encodeURIComponent(transcriptionId)}/turns/${turnIndex}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    }
+  );
+}
+
+export function updateTranscriptionRoles(
+  patientId: string,
+  transcriptionId: string,
+  roles: string[],
+) {
+  return apiRequest(
+    `/api/patients/${encodeURIComponent(patientId)}/transcription-log/${encodeURIComponent(transcriptionId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ roles }),
+    },
+  );
+}

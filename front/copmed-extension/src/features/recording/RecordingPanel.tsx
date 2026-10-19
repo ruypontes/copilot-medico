@@ -11,6 +11,8 @@ const MAX_DURATION_LABEL = formatDuration(MAX_RECORDING_MS / 1000);
 // Área de gravação da consulta: controles, status e transcrições salvas.
 export default function RecordingPanel({ recording }: { recording: Recording }) {
   const {
+    patientId,
+    updateTranscription,
     isRecording,
     isPaused,
     isProcessing,
@@ -46,7 +48,13 @@ export default function RecordingPanel({ recording }: { recording: Recording }) 
     >
       {/* === MODO LEITURA (Arquivo Aberto) === */}
       {viewingLog ? (
-        <TranscriptionViewer log={viewingLog} onClose={() => setViewingLog(null)} />
+        <TranscriptionViewer log={viewingLog}
+    patientId={patientId}
+    onClose={() => setViewingLog(null)}
+    onSaved={(updatedLog) => {
+      updateTranscription(updatedLog);
+      setViewingLog(updatedLog);
+    }} />
       ) : (
         /* === MODO GRAVAÇÃO E LISTA (Padrão) === */
         <>

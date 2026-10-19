@@ -1,4 +1,4 @@
-import { Key, ReactNode } from "react";
+﻿import { Key, ReactNode } from "react";
 
 // --- Tipos ---
 export type Message = {
@@ -29,6 +29,14 @@ export type TranscriptionDialogueTurn = {
   role?: string;
   role_key?: string;
   text?: string;
+  speaker?: string;
+  speaker_id?: string | number;
+  start?: number;
+  end?: number;
+  inicio?: number;
+  fim?: number;
+  papel?: string;
+  [key: string]: unknown;
 };
 
 export type TranscriptionLogItem = {
@@ -94,12 +102,16 @@ export type SoapDocument = {
   approved_at: string | null;
   diff: SoapDiffResult | null;
 };
+export type WindowWithWebkitAudio = Window &
+  typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+  };
 
 export function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-// Mensagem do assistente exibida no chat (avisos, erros e confirmações).
+// Mensagem do assistente exibida no chat (avisos, erros e confirma├º├Áes).
 export function botMessage(text: ReactNode): Message {
   return {
     id: Date.now(),

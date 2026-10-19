@@ -108,6 +108,97 @@ class TranscricaoRepository(_RegistroDoPaciente):
             .order_by(Transcricao.criado_em)
         )
         return [transcricao_para_dicionario(t) for t in itens]
+    def atualizar_papel_turno(
+        self, paciente_id, transcricao_id, indice_turno, novo_papel
+    ) -> dict | None:
+        pid = parse_uuid(paciente_id)
+        tid = parse_uuid(transcricao_id)
+
+        if pid is None or tid is None:
+            return None
+
+        if novo_papel not in {"medico", "paciente", "outro"}:
+            raise ValueError("Papel inválido.")
+
+        transcricao = self.sessao.scalar(
+            select(Transcricao).where(
+                Transcricao.id == tid,
+                Transcricao.paciente_id == pid,
+            )
+        )
+
+        if transcricao is None:
+            return None
+
+        turnos = [dict(turno) for turno in (transcricao.turnos or [])]
+
+        if not isinstance(indice_turno, int) or isinstance(indice_turno, bool):
+            raise ValueError("Índice do turno inválido.")
+
+        if indice_turno < 0 or indice_turno >= len(turnos):
+            raise ValueError("Turno não encontrado.")
+
+        turnos[indice_turno]["speaker"] = novo_papel
+        turnos[indice_turno]["role"] = novo_papel
+        transcricao.turnos = turnos
+
+        self.sessao.commit()
+        return transcricao_para_dicionario(transcricao)
+    def atualizar_papeis(self, paciente_id, transcricao_id, papeis):
+        pid = parse_uuid(paciente_id)
+        tid = parse_uuid(transcricao_id)
+
+        if pid is None or tid is None:
+            return None
+
+        transcricao = self.sessao.scalars(
+            select(Transcricao).where(
+                Transcricao.id == tid,
+                Transcricao.paciente_id == pid,
+            )
+        ).one_or_none()
+
+        if transcricao is None:
+            return None
+
+        if not isinstance(transcricao.turnos, list):
+            return None
+
+        # A quantidade de papéis deve corresponder à quantidade de turnos.
+        if len(papeis) != len(transcricao.turnos):
+            raise ValueError(
+                "A quantidade de papéis não corresponde à quantidade de turnos."
+            )
+
+        mapeamento = {
+            "Médico": "doctor",
+            "Paciente": "patient",
+            "Outro": "other",
+        }
+
+        novos_turnos = []
+
+        for turno, papel in zip(transcricao.turnos, papeis):
+            if not isinstance(turno, dict) or papel not in mapeamento:
+                return None
+
+            novo_turno = dict(turno)
+            novo_turno["role"] = papel
+            novo_turno["role_key"] = mapeamento[papel]
+
+            # Mantém compatibilidade com formatos antigos.
+            if "papel" in novo_turno:
+                novo_turno["papel"] = papel
+            if "speaker" in novo_turno:
+                novo_turno["speaker"] = papel
+
+            novos_turnos.append(novo_turno)
+
+        # Atribui uma nova lista para o SQLAlchemy detectar a alteração no JSON.
+        transcricao.turnos = novos_turnos
+        self.sessao.commit()
+
+        return transcricao_para_dicionario(transcricao)
 
 
 class DadoExtensaoRepository(_RegistroDoPaciente):

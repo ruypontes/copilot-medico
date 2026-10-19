@@ -29,5 +29,11 @@ export function useTranscriptionLog(patientId: string | null) {
     );
   }, []);
 
-  return { transcriptionLog, addTranscription };
+  const updateTranscription = useCallback((updated: TranscriptionLogItem) => {
+  setTranscriptionLog((prev) =>
+    prev.map((item) => item.id === updated.id ? updated : item)
+  );
+}, []);
+
+  return { transcriptionLog, addTranscription, updateTranscription };
 }
