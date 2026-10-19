@@ -1,7 +1,7 @@
 """Cria um SOAP "gerado pela IA" de exemplo numa consulta (B44, so para dev).
 
-Enquanto o gerador do B40 nao existe, e assim que se testa a edicao do medico
-e o diff (GET /api/consultations/<id>/soap e PUT .../soap/<soap_id>). O
+Cria um SOAP sem chamar a IA (o gerador e o B40: POST .../soap). Util para
+testar a edicao do medico e o diff sem gastar cota (GET /api/consultations/<id>/soap e PUT .../soap/<soap_id>). O
 conteudo e ficticio e segue o SoapV1 (B39).
 
     python scripts/criar_soap_exemplo.py <consultation_id>
