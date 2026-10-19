@@ -16,6 +16,7 @@ from backend.anonimizacao import MapaAnonimizacao, anonimizar, anonimizar_estrut
 from backend.anonimizacao import servico as anonimizacao_servico
 from backend.openapi import build_openapi_spec
 from backend.pep_import import PepImportError
+from backend.soap_diff import SoapInvalido
 from backend.auth_decorators import roles_required, token_required
 from backend.auth_service import (
     AuthError,
@@ -51,6 +52,8 @@ from repositories import (
     MensagemRepository,
     PacienteRepository,
     ParteAudioRepository,
+    SoapNaoEditavel,
+    SoapRepository,
     TranscricaoRepository,
     sessao,
 )
@@ -734,7 +737,8 @@ def transcribe_audio_route():
 # ---------------------------------------------------------------------------
 
 def _consulta_da_gravacao(consultation_id):
-    """(id da consulta normalizado, id do paciente, erro) das rotas de audio em partes."""
+    """(id da consulta normalizado, id do paciente, erro) das rotas por consulta
+    (audio em partes, SOAP): 404 se nao existe, 403 se e de outro medico."""
     patient_id = _consultas().paciente_da_consulta(consultation_id)
     if not patient_id:
         return None, None, _json_error("Consulta nao encontrada.", 404)
@@ -899,6 +903,55 @@ def transcribe_recording(consultation_id):
         "log_entry": log_entry,
         "is_error": False,
     }), 200
+
+
+# ---------------------------------------------------------------------------
+# SOAP: versao da IA x versao do medico (B44 / US018)
+#
+# A IA grava `versao_ia` (gerador do B40, via SoapRepository.registrar_versao_ia)
+# e o medico edita por PUT. O GET devolve as duas e o diff por secao, que a
+# extensao exibe (SoapDiff).
+# ---------------------------------------------------------------------------
+
+def _soap():
+    return SoapRepository(sessao.obter_sessao())
+
+
+@app.route('/api/consultations/<consultation_id>/soap', methods=['GET'])
+@roles_required("administrador", "medico")
+def get_soap(consultation_id):
+    """SOAP mais recente da consulta, com `diff` (null enquanto o medico nao editou)."""
+    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+    documento = _soap().atual(consulta_id)
+    if documento is None:
+        return _json_error("Nenhum SOAP gerado para esta consulta.", 404)
+    return jsonify({"status": "success", "soap": documento}), 200
+
+
+@app.route('/api/consultations/<consultation_id>/soap', methods=['PUT'])
+@roles_required("administrador", "medico")
+def save_soap_doctor_version(consultation_id):
+    """Grava a versao do medico. JSON: {"versao_medico": {secao: texto | [itens]}}.
+
+    A versao da IA nao muda. 409 se o SOAP ja foi aprovado ou inserido no PEP.
+    """
+    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or "versao_medico" not in data:
+        return _json_error("Envie {\"versao_medico\": {...}}.", 400)
+    try:
+        documento = _soap().salvar_versao_medico(consulta_id, data["versao_medico"])
+    except SoapInvalido as e:
+        return _json_error(str(e), 400)
+    except SoapNaoEditavel as e:
+        return _json_error(f"SOAP com status '{e}' nao pode ser editado.", 409)
+    if documento is None:
+        return _json_error("Nenhum SOAP gerado para esta consulta.", 404)
+    return jsonify({"status": "success", "soap": documento}), 200
 
 
 # Rota para obter EXCLUSIVAMENTE o histórico de transcrições de áudio

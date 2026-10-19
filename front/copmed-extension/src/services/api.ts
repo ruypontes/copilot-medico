@@ -274,6 +274,18 @@ export function sendPepImport(consultationId: string, payload: Record<string, un
   });
 }
 
+// SOAP da consulta com as versões IA/médico e o diff (B44). Resposta: { soap: SoapDocument }.
+export function getSoap(consultationId: string) {
+  return apiRequest(`/api/consultations/${encodeURIComponent(consultationId)}/soap`);
+}
+
+export function saveSoapDoctorVersion(consultationId: string, versaoMedico: Record<string, unknown>) {
+  return apiRequest(`/api/consultations/${encodeURIComponent(consultationId)}/soap`, {
+    method: "PUT",
+    body: JSON.stringify({ versao_medico: versaoMedico }),
+  });
+}
+
 export function getTranscriptionLog(patientId: string) {
   return apiRequest(`/api/patients/${encodeURIComponent(patientId)}/transcription-log`);
 }

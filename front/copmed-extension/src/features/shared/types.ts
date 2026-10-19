@@ -42,6 +42,47 @@ export type TranscriptionLogItem = {
   dialogue?: TranscriptionDialogueTurn[];
 };
 
+// SOAP (B44): versão da IA x versão do médico e o diff calculado pela API.
+export type SoapVersion = {
+  subjetivo?: string;
+  objetivo?: string;
+  avaliacao?: string;
+  plano?: string;
+  hipoteses?: string[];
+  alertas?: string[];
+  pendencias?: string[];
+};
+
+export type SoapDiffSnippet = {
+  op: "igual" | "removido" | "adicionado";
+  texto: string;
+};
+
+export type SoapDiffSection = {
+  secao: keyof SoapVersion;
+  titulo: string;
+  tipo: "texto" | "lista";
+  alterada: boolean;
+  trechos: SoapDiffSnippet[];
+};
+
+export type SoapDiffResult = {
+  alterado: boolean;
+  secoes_alteradas: string[];
+  secoes: SoapDiffSection[];
+};
+
+export type SoapDocument = {
+  id: string;
+  consultation_id: string;
+  status: "gerado" | "editado" | "aprovado" | "inserido_no_pep";
+  versao_ia: SoapVersion;
+  versao_medico: SoapVersion | null;
+  created_at: string | null;
+  approved_at: string | null;
+  diff: SoapDiffResult | null;
+};
+
 export function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }

@@ -372,3 +372,59 @@ option {
   color: #336b29;
   border: 1px solid #114c0e;
 }
+
+/* Diff do SOAP: versão da IA x versão do médico (B44). Cores translúcidas
+   funcionam nos dois temas; o texto herda a cor do tema. */
+.soap-diff-resumo,
+.soap-diff-aviso {
+  font-size: 0.85em;
+  margin: 0 0 0.5rem;
+}
+
+.soap-diff-legenda {
+  opacity: 0.8;
+}
+
+.soap-diff-secao {
+  margin-bottom: 0.75rem;
+}
+
+.soap-diff-titulo {
+  font-size: 0.9em;
+  margin: 0 0 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.soap-diff-selo {
+  font-size: 0.75em;
+  font-weight: normal;
+  padding: 0 0.4em;
+  border-radius: 4px;
+  border: 1px solid #336b29;
+}
+
+.soap-diff-texto,
+.soap-diff-vazio {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.soap-diff-lista {
+  margin: 0;
+  padding-left: 1rem;
+  list-style: none;
+}
+
+.soap-diff-removido {
+  background-color: rgba(220, 38, 38, 0.18);
+  text-decoration: line-through;
+}
+
+.soap-diff-adicionado {
+  background-color: rgba(34, 197, 94, 0.22);
+  text-decoration: none;
+  font-weight: 600;
+}

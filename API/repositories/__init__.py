@@ -11,6 +11,7 @@ from .medicos import MedicoRepository
 from .pacientes import MedicoNaoEncontrado, PacienteRepository
 from .partes_audio import ParteAudioRepository
 from .registros import DadoExtensaoRepository, TranscricaoRepository
+from .soap import SoapNaoEditavel, SoapRepository
 
 __all__ = [
     "ConsultaRepository",
@@ -21,6 +22,8 @@ __all__ = [
     "MensagemRepository",
     "PacienteRepository",
     "ParteAudioRepository",
+    "SoapNaoEditavel",
+    "SoapRepository",
     "TranscricaoRepository",
     "sessao",
 ]
