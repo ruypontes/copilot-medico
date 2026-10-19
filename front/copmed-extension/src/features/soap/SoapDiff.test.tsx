@@ -5,7 +5,7 @@ import SoapDiff from "./SoapDiff";
 import type { SoapDiffResult } from "../shared/types";
 
 // B44: o diff IA x médico fica visível depois da edição. O formato é o que a API
-// devolve em GET /api/consultations/<id>/soap (backend/soap_diff.py).
+// devolve em GET /api/consultations/<id>/soap (backend/soap/diff.py).
 
 const DIFF: SoapDiffResult = {
   alterado: true,

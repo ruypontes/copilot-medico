@@ -1,3 +1,5 @@
+import type { SoapVersion } from "../features/shared/types";
+
 export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 const TOKEN_KEY = "copmed_extension_token";
@@ -279,8 +281,10 @@ export function getSoap(consultationId: string) {
   return apiRequest(`/api/consultations/${encodeURIComponent(consultationId)}/soap`);
 }
 
-export function saveSoapDoctorVersion(consultationId: string, versaoMedico: Record<string, unknown>) {
-  return apiRequest(`/api/consultations/${encodeURIComponent(consultationId)}/soap`, {
+// Versão do médico no SoapV1; um 400 traz `errors` campo a campo (validação do B39).
+export function saveSoapDoctorVersion(consultationId: string, soapId: string, versaoMedico: SoapVersion) {
+  const path = `/api/consultations/${encodeURIComponent(consultationId)}/soap/${encodeURIComponent(soapId)}`;
+  return apiRequest(path, {
     method: "PUT",
     body: JSON.stringify({ versao_medico: versaoMedico }),
   });
@@ -288,4 +292,18 @@ export function saveSoapDoctorVersion(consultationId: string, versaoMedico: Reco
 
 export function getTranscriptionLog(patientId: string) {
   return apiRequest(`/api/patients/${encodeURIComponent(patientId)}/transcription-log`);
+}
+
+// B38: sugestões curtas sobre as transcrições dos últimos `janela_min` minutos.
+export type Suggestion = { tipo: string; texto: string };
+
+export function getRecommendations(payload: {
+  patient_id: string;
+  consultation_id: string;
+  janela_min: number;
+}) {
+  return apiRequest("/api/recommendations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

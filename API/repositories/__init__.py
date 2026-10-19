@@ -11,19 +11,19 @@ from .medicos import MedicoRepository
 from .pacientes import MedicoNaoEncontrado, PacienteRepository
 from .partes_audio import ParteAudioRepository
 from .registros import DadoExtensaoRepository, TranscricaoRepository
-from .soap import SoapNaoEditavel, SoapRepository
+from .soap import DocumentoSoapRepository, TransicaoInvalida
 
 __all__ = [
     "ConsultaRepository",
     "DadoExtensaoRepository",
+    "DocumentoSoapRepository",
     "MapaAnonimizacaoRepository",
     "MedicoNaoEncontrado",
     "MedicoRepository",
     "MensagemRepository",
     "PacienteRepository",
     "ParteAudioRepository",
-    "SoapNaoEditavel",
-    "SoapRepository",
     "TranscricaoRepository",
+    "TransicaoInvalida",
     "sessao",
 ]

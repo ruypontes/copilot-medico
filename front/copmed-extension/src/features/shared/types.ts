@@ -42,15 +42,22 @@ export type TranscriptionLogItem = {
   dialogue?: TranscriptionDialogueTurn[];
 };
 
-// SOAP (B44): versão da IA x versão do médico e o diff calculado pela API.
+// SOAP no esquema SoapV1 (B39, backend/soap/schema.py): versão da IA x versão do
+// médico e o diff calculado pela API (B44).
+export type SoapHypothesis = {
+  descricao: string;
+  cid10: string | null;
+  confianca: "baixa" | "media" | "alta";
+};
+
 export type SoapVersion = {
-  subjetivo?: string;
-  objetivo?: string;
-  avaliacao?: string;
-  plano?: string;
-  hipoteses?: string[];
-  alertas?: string[];
-  pendencias?: string[];
+  subjetivo: string;
+  objetivo: string;
+  avaliacao: string;
+  plano: string;
+  hipoteses: SoapHypothesis[];
+  alertas: string[];
+  pendencias: string[];
 };
 
 export type SoapDiffSnippet = {
@@ -76,9 +83,14 @@ export type SoapDocument = {
   id: string;
   consultation_id: string;
   status: "gerado" | "editado" | "aprovado" | "inserido_no_pep";
+  schema_version: string;
+  prompt: { id: string; versao: string | null } | null;
   versao_ia: SoapVersion;
   versao_medico: SoapVersion | null;
+  // O que o médico vê e aprova: a edição dele, ou a da IA se não editou.
+  atual: SoapVersion;
   created_at: string | null;
+  updated_at: string | null;
   approved_at: string | null;
   diff: SoapDiffResult | null;
 };

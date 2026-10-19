@@ -96,6 +96,19 @@ class TranscricaoRepository(_RegistroDoPaciente):
         )
         return [transcricao_para_dicionario(t) for t in itens]
 
+    def listar_da_consulta_desde(self, consulta_id, desde: datetime) -> list[dict]:
+        """Transcricoes da consulta gravadas a partir de `desde`, da mais
+        antiga para a mais recente (janela das recomendacoes, B38)."""
+        cid = parse_uuid(consulta_id)
+        if cid is None:
+            return []
+        itens = self.sessao.scalars(
+            select(Transcricao)
+            .where(Transcricao.consulta_id == cid, Transcricao.criado_em >= desde)
+            .order_by(Transcricao.criado_em)
+        )
+        return [transcricao_para_dicionario(t) for t in itens]
+
 
 class DadoExtensaoRepository(_RegistroDoPaciente):
     def adicionar(self, paciente_id, conteudo, consulta_id=None, url_origem=None,
