@@ -94,6 +94,11 @@ class ParteAudioRepository(Repositorio):
         fechado no meio): o audio nao pode ficar esquecido no servidor."""
         return self._remover(ParteAudio.criado_em < limite)
 
+    def caminhos(self) -> list[str]:
+        """Arquivos que ainda tem linha (gravacao em andamento): o job de
+        limpeza nao pode apaga-los como orfaos (B35)."""
+        return list(self.sessao.scalars(select(ParteAudio.caminho)))
+
     def _remover(self, *filtros) -> list[str]:
         caminhos = list(self.sessao.scalars(select(ParteAudio.caminho).where(*filtros)))
         if caminhos:

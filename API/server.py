@@ -4,12 +4,12 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Flask, g, request, jsonify
 from flask_cors import CORS
-import tempfile
 import speech_recognition as sr
 
 # Assuming these imports are correct and available
 from backend import audio_chunks
 from backend import gemini_connection
+from backend import limpeza_audio
 from backend import pdf_reader
 from backend import pep_import
 from backend.anonimizacao import MapaAnonimizacao, anonimizar, anonimizar_estrutura
@@ -676,14 +676,9 @@ def transcribe_audio_route():
         if consultation_id and not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return jsonify({"status": "error", "message": "Consulta nao encontrada para este paciente."}), 404
 
-        file_ext = '.wav'
-        if audio_file.filename and '.' in audio_file.filename:
-            file_ext = '.' + audio_file.filename.split('.')[-1]
-
-        with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
-            tmp_path = tmp.name
-            audio_file.save(tmp_path)
-            print(f"[TRANSCRIÇÃO] Áudio salvo em: {tmp_path}")
+        # Na mesma base das partes (B35): o job diario acha o arquivo se o
+        # processo cair antes do finally abaixo.
+        tmp_path = audio_chunks.salvar_avulso(audio_file, audio_file.filename)
 
         # 3 e 4. Diarização inteligente ou, se falhar/não existir, transcrição simples
         texto_final, dialogue_structure, final_duration = _transcrever_arquivo(tmp_path, duration_input)
@@ -725,9 +720,9 @@ def transcribe_audio_route():
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Erro interno: {e}"}), 500
     finally:
-        # Limpeza
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        # US017-CA007: o audio sai do servidor com ou sem sucesso (B35)
+        if tmp_path:
+            audio_chunks.apagar([tmp_path])
 
 
 # ---------------------------------------------------------------------------
@@ -1484,5 +1479,9 @@ if __name__ == '__main__':
     # Cria/atualiza as tabelas antes de subir (alembic upgrade head), no
     # Docker e fora dele. O antigo seed do "Joao Silva" (D-09/D-24) saiu.
     sessao.aplicar_migracoes()
+    # Com debug=True o reloader roda o server em um processo filho
+    # (WERKZEUG_RUN_MAIN): o job sobe so nele, para nao duplicar.
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        limpeza_audio.iniciar_limpeza_periodica()
     print("Servidor Flask com Gemini e banco relacional iniciado.")
     app.run(host='0.0.0.0', port=3001, debug=True)
