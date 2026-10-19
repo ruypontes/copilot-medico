@@ -4,12 +4,12 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Flask, g, request, jsonify
 from flask_cors import CORS
-import tempfile
 import speech_recognition as sr
 
 # Assuming these imports are correct and available
 from backend import audio_chunks
 from backend import gemini_connection
+from backend import limpeza_audio
 from backend import pdf_reader
 from backend import pep_import
 from backend import recomendacoes
@@ -17,6 +17,7 @@ from backend.anonimizacao import MapaAnonimizacao, anonimizar, anonimizar_estrut
 from backend.anonimizacao import servico as anonimizacao_servico
 from backend.openapi import build_openapi_spec
 from backend.pep_import import PepImportError
+from backend.soap import SoapInvalido
 from backend.auth_decorators import roles_required, token_required
 from backend.auth_service import (
     AuthError,
@@ -47,12 +48,14 @@ from backend.config import settings
 from repositories import (
     ConsultaRepository,
     DadoExtensaoRepository,
+    DocumentoSoapRepository,
     MapaAnonimizacaoRepository,
     MedicoNaoEncontrado,
     MensagemRepository,
     PacienteRepository,
     ParteAudioRepository,
     TranscricaoRepository,
+    TransicaoInvalida,
     sessao,
 )
 from backend.processador_voz.processador_voz import TranscritorVoz
@@ -677,14 +680,9 @@ def transcribe_audio_route():
         if consultation_id and not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return jsonify({"status": "error", "message": "Consulta nao encontrada para este paciente."}), 404
 
-        file_ext = '.wav'
-        if audio_file.filename and '.' in audio_file.filename:
-            file_ext = '.' + audio_file.filename.split('.')[-1]
-
-        with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
-            tmp_path = tmp.name
-            audio_file.save(tmp_path)
-            print(f"[TRANSCRIÇÃO] Áudio salvo em: {tmp_path}")
+        # Na mesma base das partes (B35): o job diario acha o arquivo se o
+        # processo cair antes do finally abaixo.
+        tmp_path = audio_chunks.salvar_avulso(audio_file, audio_file.filename)
 
         # 3 e 4. Diarização inteligente ou, se falhar/não existir, transcrição simples
         texto_final, dialogue_structure, final_duration = _transcrever_arquivo(tmp_path, duration_input)
@@ -726,9 +724,9 @@ def transcribe_audio_route():
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Erro interno: {e}"}), 500
     finally:
-        # Limpeza
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        # US017-CA007: o audio sai do servidor com ou sem sucesso (B35)
+        if tmp_path:
+            audio_chunks.apagar([tmp_path])
 
 
 # ---------------------------------------------------------------------------
@@ -740,7 +738,8 @@ def transcribe_audio_route():
 # ---------------------------------------------------------------------------
 
 def _consulta_da_gravacao(consultation_id):
-    """(id da consulta normalizado, id do paciente, erro) das rotas de audio em partes."""
+    """(id da consulta normalizado, id do paciente, erro) das rotas por consulta
+    (audio em partes, SOAP): 404 se nao existe, 403 se e de outro medico."""
     patient_id = _consultas().paciente_da_consulta(consultation_id)
     if not patient_id:
         return None, None, _json_error("Consulta nao encontrada.", 404)
@@ -905,6 +904,59 @@ def transcribe_recording(consultation_id):
         "log_entry": log_entry,
         "is_error": False,
     }), 200
+
+
+# ---------------------------------------------------------------------------
+# SOAP: versao da IA x versao do medico (B44 / US018)
+#
+# O documento e gravado pelo DocumentoSoapRepository (B39), sempre validado
+# pelo SoapV1: a IA cria (B40) e o medico edita aqui. Todo documento devolvido
+# traz `diff` por secao entre as duas versoes, que a extensao exibe (SoapDiff).
+# ---------------------------------------------------------------------------
+
+def _soap():
+    return DocumentoSoapRepository(sessao.obter_sessao())
+
+
+@app.route('/api/consultations/<consultation_id>/soap', methods=['GET'])
+@roles_required("administrador", "medico")
+def get_soap(consultation_id):
+    """SOAP mais recente da consulta, com `diff` (null enquanto o medico nao editou)."""
+    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+    documento = _soap().mais_recente(consulta_id)
+    if documento is None:
+        return _json_error("Nenhum SOAP gerado para esta consulta.", 404)
+    return jsonify({"status": "success", "soap": documento}), 200
+
+
+@app.route('/api/consultations/<consultation_id>/soap/<soap_id>', methods=['PUT'])
+@roles_required("administrador", "medico")
+def save_soap_doctor_version(consultation_id, soap_id):
+    """Grava a versao do medico. JSON: {"versao_medico": <SoapV1>}.
+
+    A versao da IA nao muda. 400 com `errors` campo a campo se o SoapV1 for
+    violado; 409 se o SOAP ja foi aprovado ou inserido no PEP.
+    """
+    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+    repo = _soap()
+    documento = repo.obter(soap_id)
+    # O id do SOAP vem na URL: nao pode editar o de outra consulta
+    if documento is None or documento["consultation_id"] != consulta_id:
+        return _json_error("SOAP nao encontrado nesta consulta.", 404)
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or "versao_medico" not in data:
+        return _json_error("Envie {\"versao_medico\": {...}}.", 400)
+    try:
+        documento = repo.salvar_edicao(soap_id, data["versao_medico"])
+    except SoapInvalido as e:
+        return jsonify({"status": "error", "message": str(e), "errors": e.erros}), 400
+    except TransicaoInvalida as e:
+        return _json_error(str(e), 409)
+    return jsonify({"status": "success", "soap": documento}), 200
 
 
 # Rota para obter EXCLUSIVAMENTE o histórico de transcrições de áudio
@@ -1497,5 +1549,9 @@ if __name__ == '__main__':
     # Cria/atualiza as tabelas antes de subir (alembic upgrade head), no
     # Docker e fora dele. O antigo seed do "Joao Silva" (D-09/D-24) saiu.
     sessao.aplicar_migracoes()
+    # Com debug=True o reloader roda o server em um processo filho
+    # (WERKZEUG_RUN_MAIN): o job sobe so nele, para nao duplicar.
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        limpeza_audio.iniciar_limpeza_periodica()
     print("Servidor Flask com Gemini e banco relacional iniciado.")
     app.run(host='0.0.0.0', port=3001, debug=True)

@@ -4,12 +4,16 @@ Nada entra na tabela sem passar pelo SoapV1: `criar` e `salvar_edicao`
 validam o JSON e levantam SoapInvalido se ele estiver fora do esquema. Assim
 o B40 (geracao pela IA) e o B43 (edicao pelo medico) gravam sempre o mesmo
 formato, e o banco nunca guarda texto livre no lugar do SOAP.
+
+Todo documento sai com `diff` (B44): a diferenca por secao entre a versao da
+IA e a do medico, ou null enquanto o medico nao editou.
 """
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 
 from backend.soap import VERSAO, validar_soap
+from backend.soap.diff import calcular_diff
 from models import Consulta, DocumentoSoap, StatusSoap
 
 from .base import Repositorio, id_texto, iso, parse_uuid
@@ -33,6 +37,7 @@ def para_dicionario(doc: DocumentoSoap) -> dict:
         "created_at": iso(doc.criado_em),
         "updated_at": iso(doc.atualizado_em),
         "approved_at": iso(doc.aprovado_em),
+        "diff": calcular_diff(doc.versao_ia, doc.versao_medico),
     }
 
 
@@ -56,6 +61,19 @@ class DocumentoSoapRepository(Repositorio):
             .order_by(DocumentoSoap.criado_em.desc())
         )
         return [para_dicionario(d) for d in docs]
+
+    def mais_recente(self, consulta_id) -> dict | None:
+        """SOAP atual da consulta: cada geracao nova (B40) cria outro documento."""
+        cid = parse_uuid(consulta_id)
+        if cid is None:
+            return None
+        doc = self.sessao.scalar(
+            select(DocumentoSoap)
+            .where(DocumentoSoap.consulta_id == cid)
+            .order_by(DocumentoSoap.criado_em.desc())
+            .limit(1)
+        )
+        return para_dicionario(doc) if doc else None
 
     def criar(self, consulta_id, versao_ia, prompt_id=None, prompt_versao=None) -> dict | None:
         """Grava o SOAP gerado pela IA (status `gerado`). Valida pelo SoapV1
