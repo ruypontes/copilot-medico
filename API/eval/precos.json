@@ -1,0 +1,15 @@
+{
+  "_aviso": "VALORES ILUSTRATIVOS. Conferir na tabela oficial do provedor antes de usar o numero para decidir qualquer coisa, e entao trocar 'verificado' para true e preencher 'verificado_em' e 'fonte'. Enquanto 'verificado' for false, o relatorio avisa que o custo e apenas ilustrativo. O gasto REAL do projeto e R$ 0 (free tier, docs/12): isto e o custo EQUIVALENTE para o orcamento pos-contrato.",
+  "verificado": false,
+  "verificado_em": null,
+  "fonte": null,
+  "usd_brl": 5.5,
+  "referencia_brl_por_consulta_20min": 0.5,
+  "modelos": {
+    "gemini-2.5-flash": {
+      "entrada_usd_por_milhao_tokens": 0.3,
+      "saida_usd_por_milhao_tokens": 2.5,
+      "audio_usd_por_minuto": 0.00192
+    }
+  }
+}
