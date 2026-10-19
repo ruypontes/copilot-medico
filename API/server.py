@@ -9,7 +9,7 @@ import speech_recognition as sr
 
 # Assuming these imports are correct and available
 from backend import audio_chunks
-from backend import gemini_connection
+from backend.llm import chat as chat_ia
 from backend import pdf_reader
 from backend import pep_import
 from backend.anonimizacao import MapaAnonimizacao, anonimizar, anonimizar_estrutura
@@ -1039,7 +1039,7 @@ def handle_chat_message():
 
         _mensagens().adicionar(consultation_id, "user", texto_anonimo)
 
-        ai_response_text = gemini_connection.send_message(
+        ai_response_text = chat_ia.send_message(
             patient_id, consultation_id, texto_anonimo
         )
 
@@ -1142,7 +1142,7 @@ def _register_pep_import(patient_id, consultation_id, data, require_typed=False)
         )
 
         _mensagens().adicionar(consultation_id, "user", texto_anonimo)
-        ai_response_text = gemini_connection.send_message(
+        ai_response_text = chat_ia.send_message(
             patient_id, consultation_id, texto_anonimo
         )
         _mensagens().adicionar(consultation_id, "model", ai_response_text)
@@ -1281,8 +1281,7 @@ def upload_pdf():
         # Adiciona a mensagem ao histórico da consulta
         _mensagens().adicionar(consultation_id, "user", context_message_for_pdf)
 
-        # A assinatura correta é send_message(patient_id: str, consultation_id: str, message_text: str)
-        ai_response_text = gemini_connection.send_message(patient_id, consultation_id, context_message_for_pdf)
+        ai_response_text = chat_ia.send_message(patient_id, consultation_id, context_message_for_pdf)
 
         # Adiciona a resposta da IA ao histórico da consulta
         _mensagens().adicionar(consultation_id, "model", ai_response_text)
@@ -1465,7 +1464,7 @@ def handle_recommendations():
 
         # Chama a API Gemini. Ela carrega o histórico (incluindo transcrições) e
         # recebe o prompt de recomendação.
-        resposta_ia = gemini_connection.send_message(
+        resposta_ia = chat_ia.send_message(
             patient_id,
             consultation_id,
             prompt_recomendacao_medica

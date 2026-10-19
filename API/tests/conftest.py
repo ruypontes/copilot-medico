@@ -116,9 +116,9 @@ def _make_stub_text_filter() -> types.ModuleType:
     return mod
 
 
-def _make_stub_gemini_connection() -> types.ModuleType:
-    """Substitui `backend.gemini_connection` para nao chamar a API do Google."""
-    mod = types.ModuleType("backend.gemini_connection")
+def _make_stub_chat_ia() -> types.ModuleType:
+    """Substitui `backend.llm.chat` para nao chamar a API do Google."""
+    mod = types.ModuleType("backend.llm.chat")
 
     def send_message(patient_id: str, consultation_id: str, message_text: str) -> str:
         return f"[stubbed AI reply] {message_text}"
@@ -149,7 +149,7 @@ _HEAVY_STUBS = {
     "speech_recognition": _make_stub_speech_recognition,
     "backend.audio_service": _make_stub_audio_service,
     "backend.text_filter": _make_stub_text_filter,
-    "backend.gemini_connection": _make_stub_gemini_connection,
+    "backend.llm.chat": _make_stub_chat_ia,
     "backend.pdf_reader": _make_stub_pdf_reader,
 }
 
@@ -173,6 +173,7 @@ def stub_heavy_modules():
     # ImportError: parent 'backend' not in sys.modules - um bug que so aparecia
     # ao rodar um arquivo de teste isolado.
     importlib.import_module("backend")
+    importlib.import_module("backend.llm")
 
     originals = {name: sys.modules.get(name) for name in _HEAVY_STUBS}
     originals.update({name: sys.modules.get(name) for name in _VOZ_MODULES})

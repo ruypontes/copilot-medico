@@ -2,7 +2,7 @@
 
 Uma unica chamada ao Gemini transcreve o audio e marca quem fala em cada
 turno (medico, paciente, outro). O modelo devolve JSON, convertido aqui para o
-contrato comum de `provider.py`. O SDK `google.generativeai` so e importado na
+contrato comum de `provider.py`. O SDK `google-genai` (B41) so e importado na
 primeira transcricao, para o servidor e os testes subirem sem ele.
 """
 import io
@@ -65,12 +65,15 @@ GERACAO = {"response_mime_type": "application/json", "temperature": 0}
 
 # Sintomas, remedios e doses disparam os filtros padrao com frequencia; so
 # conteudo de risco alto e bloqueado na transcricao.
-SEGURANCA = {
-    "HARM_CATEGORY_HARASSMENT": "BLOCK_ONLY_HIGH",
-    "HARM_CATEGORY_HATE_SPEECH": "BLOCK_ONLY_HIGH",
-    "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_ONLY_HIGH",
-    "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_ONLY_HIGH",
-}
+SEGURANCA = [
+    {"category": categoria, "threshold": "BLOCK_ONLY_HIGH"}
+    for categoria in (
+        "HARM_CATEGORY_HARASSMENT",
+        "HARM_CATEGORY_HATE_SPEECH",
+        "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "HARM_CATEGORY_DANGEROUS_CONTENT",
+    )
+]
 
 
 def _sem_acento(texto: str) -> str:
@@ -167,16 +170,21 @@ class GeminiAudioProvider(TranscriptionProvider):
         self.modelo = modelo or MODELO_PADRAO
         self.timeout = timeout
         self._genai_mod = genai_mod  # testes injetam um SDK falso
+        self._cliente = None
 
-    def _genai(self):
-        if self._genai_mod is None:
-            try:
-                import google.generativeai as genai
-            except ImportError as e:
-                raise TranscriptionError("Pacote google-generativeai não instalado") from e
-            genai.configure(api_key=self.api_key)
-            self._genai_mod = genai
-        return self._genai_mod
+    def _client(self):
+        if self._cliente is None:
+            genai = self._genai_mod
+            if genai is None:
+                try:
+                    from google import genai
+                except ImportError as e:
+                    raise TranscriptionError("Pacote google-genai não instalado") from e
+            self._cliente = genai.Client(
+                api_key=self.api_key,
+                http_options={"timeout": int(self.timeout * 1000)},  # ms
+            )
+        return self._cliente
 
     def _sem_chave(self, erro: Exception) -> str:
         """Mensagem do erro sem a chave: o SDK a repete na URL (?key=...)."""
@@ -198,26 +206,26 @@ class GeminiAudioProvider(TranscriptionProvider):
         except wave.Error as e:
             raise TranscriptionError("WAV inválido") from e
 
-    def _gerar(self, modelo, dados: bytes, mime: str) -> str:
+    def _gerar(self, cliente, dados: bytes, mime: str) -> str:
         try:
-            resposta = modelo.generate_content(
-                [PROMPT, {"mime_type": mime, "data": dados}],
-                request_options={"timeout": self.timeout},
+            resposta = cliente.models.generate_content(
+                model=self.modelo,
+                contents=[PROMPT, {"inline_data": {"mime_type": mime, "data": dados}}],
+                config={**GERACAO, "safety_settings": SEGURANCA},
             )
-            # .text levanta quando a resposta foi bloqueada ou veio sem partes
-            return resposta.text
+            texto = resposta.text
         except Exception as e:
             raise TranscriptionError(f"Falha ao chamar o Gemini: {self._sem_chave(e)}") from e
+        if not texto:
+            # google-genai devolve None quando a resposta foi bloqueada
+            raise TranscriptionError("Gemini devolveu uma resposta vazia ou bloqueada")
+        return texto
 
     def processar_audio(self, caminho_audio: str) -> dict:
-        modelo = self._genai().GenerativeModel(
-            model_name=self.modelo,
-            generation_config=GERACAO,
-            safety_settings=SEGURANCA,
-        )
+        cliente = self._client()
         turnos = []
         for dados, mime, inicio in self._pedacos(caminho_audio):
-            for turno in converter_turnos(_ler_json(self._gerar(modelo, dados, mime))):
+            for turno in converter_turnos(_ler_json(self._gerar(cliente, dados, mime))):
                 # Tempos do modelo sao relativos ao pedaco enviado
                 turno["start"] += inicio
                 turno["end"] += inicio
