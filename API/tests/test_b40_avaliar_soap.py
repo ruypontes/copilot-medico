@@ -94,3 +94,11 @@ def test_falha_que_nao_e_cota_salva_progresso_e_para(tmp_path):
 
     assert codigo == 2
     assert [r["id"] for r in relatorio["resultados"]] == ["caso-01"]
+
+
+def test_cid10_subcategoria_do_esperado_conta_como_acerto():
+    assert avaliar_soap.cid10_acertou(["R50"], ["R50.9", "B34.9"]) is True
+    assert avaliar_soap.cid10_acertou(["G44.2"], ["G44.2"]) is True
+    assert avaliar_soap.cid10_acertou(["G44.2"], ["G44"]) is False  # menos especifico
+    assert avaliar_soap.cid10_acertou(["R50"], ["R509"]) is False
+    assert avaliar_soap.cid10_acertou(["I10"], ["I11.9"]) is False

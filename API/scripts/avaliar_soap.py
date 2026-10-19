@@ -52,6 +52,13 @@ def material_do_caso(caso: dict) -> str:
     return f"## Transcrição da consulta\n{caso['transcricao']}"
 
 
+def cid10_acertou(esperados: list[str], gerados: list[str]) -> bool:
+    """Acerto se algum CID gerado e o esperado ou uma subcategoria dele
+    (esperado R50, gerado R50.9). O contrario tambem vale: esperado G44.2,
+    gerado so a categoria G44 nao conta - falta especificidade."""
+    return any(g == e or g.startswith(e + ".") for e in esperados for g in gerados)
+
+
 def avaliar_caso(caso: dict, chamar_modelo) -> dict:
     nomes = caso.get("pii_plantada", {}).get("nome_completo", [])
     texto = anonimizar(material_do_caso(caso), nomes_conhecidos=nomes).texto
@@ -68,7 +75,7 @@ def avaliar_caso(caso: dict, chamar_modelo) -> dict:
             erros=[],
             cid10_esperado=caso.get("cid10_esperado", []),
             cid10_gerado=hipoteses,
-            cid10_acertou=any(c in hipoteses for c in caso.get("cid10_esperado", [])),
+            cid10_acertou=cid10_acertou(caso.get("cid10_esperado", []), hipoteses),
         )
     except gerador.SoapNaoGerado as erro:
         resultado.update(valido=False, tentativas=erro.tentativas, erros=erro.erros)
