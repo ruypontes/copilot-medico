@@ -37,6 +37,9 @@ instance/
 # JSON files for local development
 *.json
 
+# Exceção: casos sintéticos de eval (B45) são versionados de propósito
+!eval/cases/*.json
+
 # Relatorios de cobertura (B10)
 coverage.xml
 htmlcov/
