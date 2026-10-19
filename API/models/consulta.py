@@ -63,12 +63,22 @@ class DocumentoSoap(UuidPkMixin, CriadoEmMixin, Base):
         Uuid, ForeignKey("consulta.id", ondelete="CASCADE"), nullable=False, index=True
     )
     # Esquema SoapV1 (US018): versao gerada pela IA e versao editada pelo medico.
+    # As duas so sao gravadas depois de validadas (backend/soap/schema.py).
     versao_ia: Mapped[dict] = mapped_column(JSON, nullable=False)
     versao_medico: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[StatusSoap] = mapped_column(
         enum_column(StatusSoap, "status_soap"), nullable=False, default=StatusSoap.GERADO
     )
     aprovado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Rastreabilidade (B39, doc 05 secao 7): qual esquema o JSON segue e qual
+    # prompt o gerou - para comparar versoes de prompt na avaliacao (B46).
+    schema_versao: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="SoapV1", server_default="SoapV1"
+    )
+    prompt_id: Mapped[str | None] = mapped_column(String(64))
+    prompt_versao: Mapped[str | None] = mapped_column(String(16))
+    atualizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), onupdate=utcnow)
 
 
 class Consentimento(Base):

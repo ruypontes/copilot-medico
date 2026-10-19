@@ -139,6 +139,10 @@ erDiagram
         json versao_medico
         string status "gerado | editado | aprovado | inserido_no_pep"
         datetime aprovado_em
+        string schema_versao "SoapV1"
+        string prompt_id
+        string prompt_versao
+        datetime atualizado_em
     }
     CONSENTIMENTO {
         uuid consulta_id
