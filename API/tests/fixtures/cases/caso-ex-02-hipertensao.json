@@ -1,0 +1,50 @@
+{
+  "id": "caso-ex-02-hipertensao",
+  "sintetico": true,
+  "prontuario": {
+    "peso": "88",
+    "altura": "1.68",
+    "pas": "160",
+    "pad": "100",
+    "anamnese": "Retorno para controle de pressao arterial."
+  },
+  "transcricao": [
+    {
+      "papel": "medico",
+      "texto": "Boa tarde, Carlos Henrique Souza. Como tem passado com a pressao?"
+    },
+    {
+      "papel": "paciente",
+      "texto": "Doutor, tenho sentido dor de cabeca na nuca e parei de tomar o remedio faz uma semana porque acabou. Meu email e carlos.souza@exemplo.com."
+    },
+    {
+      "papel": "medico",
+      "texto": "A pressao hoje esta em 160 por 100. Vamos reiniciar o tratamento e pedir exames de rotina."
+    },
+    {
+      "papel": "paciente",
+      "texto": "Tenho casa no CEP 50030-230 e nao consigo vir todo mes ao posto."
+    }
+  ],
+  "gabarito": {
+    "soap": {
+      "subjetivo": "Paciente hipertenso em retorno relata cefaleia occipital e suspensao do anti-hipertensivo ha uma semana por termino do medicamento; refere dificuldade para comparecer mensalmente ao posto de saude.",
+      "objetivo": "Pressao arterial de 160 por 100 mmHg, peso de 88 quilos e altura de 1,68 metro; sem outros dados de exame fisico ou exames laboratoriais disponiveis nesta consulta de retorno.",
+      "avaliacao": "Hipertensao arterial sistemica descompensada por interrupcao do tratamento, com cefaleia possivelmente associada, sem sinais de emergencia hipertensiva descritos, necessitando reinicio do esquema e reavaliacao de adesao.",
+      "plano": "Reiniciar o anti-hipertensivo em uso, solicitar exames de rotina, orientar dieta com pouco sal e atividade fisica, facilitar a retirada do medicamento por prazo maior e agendar retorno para reavaliar a pressao."
+    },
+    "cid10": [
+      "I10"
+    ],
+    "cid10_capitulo": "IX",
+    "pendencias_esperadas": [
+      "medicacao em uso",
+      "exames de rotina"
+    ]
+  },
+  "pii_plantada": [
+    "Carlos Henrique Souza",
+    "carlos.souza@exemplo.com",
+    "50030-230"
+  ]
+}

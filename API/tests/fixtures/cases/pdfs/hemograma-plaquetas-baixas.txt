@@ -1,0 +1,4 @@
+HEMOGRAMA (caso sintetico)
+Hemoglobina: 14,1 g/dL
+Leucocitos: 3.200 /mm3
+Plaquetas: 82.000 /mm3 (baixo)
