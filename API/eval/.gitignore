@@ -1,0 +1,5 @@
+# O API/.gitignore ignora *.json (bancos locais de desenvolvimento). Aqui os JSON sao
+# codigo: a tabela de precos e os casos de referencia (B45) precisam ser versionados.
+!*.json
+# Relatorios do provedor mock validam so o harness, nao a IA: nao versionar (.md e .json).
+reports/*-mock-*
