@@ -5,10 +5,13 @@ a validacao do que chega e o arquivo temporario de cada parte; os metadados
 (sequencia, duracao) vao para a tabela `parte_audio`.
 
 O audio nunca e persistido alem da transcricao (US017-CA007): quem chama
-apaga os arquivos com `apagar()` assim que a gravacao e transcrita.
+apaga os arquivos com `apagar()` assim que a gravacao e transcrita, com ou
+sem sucesso. O que escapar disso (processo derrubado no meio, por exemplo)
+e varrido por `apagar_orfaos()` no job diario (B35).
 """
 import re
 import tempfile
+import time
 import uuid
 import wave
 from dataclasses import dataclass
@@ -25,6 +28,12 @@ MAX_SEQ = 1000
 
 # O id da gravacao vira nome de pasta: so caracteres seguros.
 _RECORDING_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+# Extensao do audio inteiro da rota legada: vira parte do nome do arquivo.
+_EXTENSAO = re.compile(r"^[A-Za-z0-9]{1,5}$")
+
+# Audio inteiro de /api/transcribe_audio: mesma base das partes, para o job
+# diario enxergar tudo o que o servidor gravou.
+PASTA_AVULSOS = "avulsos"
 
 
 class ParteInvalida(ValueError):
@@ -83,9 +92,10 @@ def salvar(arquivo, consulta_id: str, gravacao_id: str, seq: int) -> ArquivoDePa
     pasta = diretorio_base() / consulta_id / gravacao_id
     pasta.mkdir(parents=True, exist_ok=True)
     caminho = pasta / f"{seq:04d}-{uuid.uuid4().hex}.wav"
-    arquivo.save(str(caminho))
 
     try:
+        # Dentro do try: upload interrompido no meio deixaria um WAV parcial
+        arquivo.save(str(caminho))
         tamanho = caminho.stat().st_size
         if tamanho > settings.audio_chunk_max_mb * 1024 * 1024:
             raise ParteInvalida(
@@ -96,10 +106,30 @@ def salvar(arquivo, consulta_id: str, gravacao_id: str, seq: int) -> ArquivoDePa
             raise ParteInvalida("audio_file esta vazio.")
         if duracao > MAX_DURACAO_S + TOLERANCIA_S:
             raise ParteInvalida(f"Cada parte deve ter no maximo {MAX_DURACAO_S // 60} min.")
-    except ParteInvalida:
+    except BaseException:
         apagar([str(caminho)])
         raise
     return ArquivoDeParte(str(caminho), tamanho, duracao)
+
+
+def salvar_avulso(arquivo, nome_original: str | None = None) -> str:
+    """Grava o audio inteiro da rota legada e devolve o caminho.
+
+    Quem chama apaga com `apagar([caminho])` num `finally`. A extensao do nome
+    original so e aproveitada se for segura; senao, `.wav`.
+    """
+    extensao = (nome_original or "").rsplit(".", 1)[-1] if "." in (nome_original or "") else ""
+    if not _EXTENSAO.match(extensao):
+        extensao = "wav"
+    pasta = diretorio_base() / PASTA_AVULSOS
+    pasta.mkdir(parents=True, exist_ok=True)
+    caminho = pasta / f"{uuid.uuid4().hex}.{extensao.lower()}"
+    try:
+        arquivo.save(str(caminho))
+    except BaseException:
+        apagar([str(caminho)])
+        raise
+    return str(caminho)
 
 
 def apagar(caminhos) -> None:
@@ -116,3 +146,26 @@ def apagar(caminhos) -> None:
                 pasta.rmdir()
             except OSError:
                 break
+
+
+def apagar_orfaos(idade_minima_s: float, em_uso=()) -> list[str]:
+    """Apaga os arquivos da base mais velhos que `idade_minima_s` e fora de
+    `em_uso` (caminhos que ainda tem linha em `parte_audio`). Devolve o que
+    apagou. A idade minima protege a gravacao e a transcricao em andamento.
+    """
+    base = diretorio_base()
+    if not base.is_dir():
+        return []
+    protegidos = {str(Path(c).resolve()) for c in em_uso}
+    limite = time.time() - idade_minima_s
+    apagados = []
+    for arquivo in base.rglob("*"):
+        try:
+            if (not arquivo.is_file() or str(arquivo.resolve()) in protegidos
+                    or arquivo.stat().st_mtime > limite):
+                continue
+        except OSError:
+            continue  # apagado por outra requisicao durante a varredura
+        apagados.append(str(arquivo))
+    apagar(apagados)
+    return apagados

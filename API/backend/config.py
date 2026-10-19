@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     audio_chunk_max_mb: int = 64
     # Partes de gravacoes nunca finalizadas sao apagadas depois deste prazo.
     audio_chunk_ttl_hours: int = 24
+    # Job que apaga o audio que sobrou (B35); 0 desliga.
+    audio_cleanup_interval_hours: float = 24
 
     # Provedor de transcricao (ADR-04). Vazio ou "gemini" usa o Gemini audio
     # com a mesma GEMINI_API_KEY (B31); "whisper" usa o Whisper via Groq e
