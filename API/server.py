@@ -13,6 +13,8 @@ from backend import limpeza_audio
 from backend import pdf_reader
 from backend import pep_import
 from backend import recomendacoes
+from backend.soap import gerador as soap_gerador
+from backend.soap.material import montar_material
 from backend.anonimizacao import MapaAnonimizacao, anonimizar, anonimizar_estrutura
 from backend.anonimizacao import servico as anonimizacao_servico
 from backend.openapi import build_openapi_spec
@@ -151,6 +153,10 @@ def _anonimizar_para_envio(texto, patient_id=None, consultation_id=None):
 
 
 def _anonimizar_conteudo_extensao(conteudo, patient_id=None, consultation_id=None):
+    return _anonimizar_estrutura_da_consulta(conteudo, patient_id, consultation_id)[0]
+
+
+def _anonimizar_estrutura_da_consulta(conteudo, patient_id=None, consultation_id=None):
     """Anonimiza a estrutura raspada do prontuario antes de PERSISTI-LA (B69).
 
     `_anonimizar_para_envio` cobre o texto que sai para o LLM; este cobre o
@@ -181,7 +187,7 @@ def _anonimizar_conteudo_extensao(conteudo, patient_id=None, consultation_id=Non
 
     if consultation_id and mapa_final is not None:
         _mapas_anonimizacao().salvar(consultation_id, mapa_final, cofre)
-    return conteudo_anonimo
+    return conteudo_anonimo, mapa_final or mapa
 
 
 def _dados_extensao():
@@ -918,6 +924,86 @@ def _soap():
     return DocumentoSoapRepository(sessao.obter_sessao())
 
 
+def _reidratar(valor, mapa):
+    """Troca os tokens ([PACIENTE], [CPF_1]...) pelos valores reais em toda a
+    estrutura. O SOAP fica tokenizado no banco, como o chat (ADR-03); so a
+    resposta ao medico e reidratada (US016-CA002)."""
+    if isinstance(valor, str):
+        return mapa.reidratar(valor)
+    if isinstance(valor, list):
+        return [_reidratar(item, mapa) for item in valor]
+    if isinstance(valor, dict):
+        return {chave: _reidratar(item, mapa) for chave, item in valor.items()}
+    return valor
+
+
+def _soap_para_o_medico(documento, consulta_id, mapa=None):
+    """Reidrata com o mapa da requisicao (POST/PUT) ou o salvo da consulta
+    (GET). Sem cofre aberto o mapa nao e persistido (B26): o GET mostra os
+    tokens, como o resto do sistema faz quando nao ha chave para abrir nomes."""
+    if mapa is None:
+        mapa = _mapas_anonimizacao().carregar(consulta_id, _cofre_atual())
+    return _reidratar(documento, mapa)
+
+
+def _material_da_consulta(patient_id, consulta_id):
+    """Transcricoes, dados do prontuario e mensagens do medico da consulta (B40)."""
+    desde_sempre = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    transcricoes = _transcricoes().listar_da_consulta_desde(consulta_id, desde_sempre)
+    dados = [d for d in reversed(_dados_extensao().listar(patient_id))
+             if d.get("consultation_id") == consulta_id]
+    mensagens = _mensagens().historico(consulta_id)
+    return montar_material(transcricoes, dados, mensagens)
+
+
+@app.route('/api/consultations/<consultation_id>/soap', methods=['POST'])
+@roles_required("administrador", "medico")
+def generate_soap(consultation_id):
+    """Gera o SOAP da consulta pela IA e grava como versao da IA (B40 / US018-CA001).
+
+    Junta transcricoes, dados do prontuario e mensagens do medico, anonimiza
+    (US016), chama o Gemini com o prompt versionado e o response_schema do
+    SoapV1 (ADR-05) e valida. JSON invalido ganha UMA nova tentativa; se falhar
+    de novo, 502 com os erros. O SOAP e gravado tokenizado e devolvido reidratado.
+    """
+    consulta_id, patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+
+    material = _material_da_consulta(patient_id, consulta_id)
+    if not material:
+        return _json_error(
+            "A consulta ainda nao tem transcricao, dados do prontuario ou anotacoes para gerar o SOAP.", 400
+        )
+    texto_anonimo, mapa = _anonimizar_para_envio(material, patient_id, consulta_id)
+
+    try:
+        resultado = soap_gerador.gerar_soap(texto_anonimo, gemini_connection.gerar_resposta_unica)
+    except soap_gerador.SoapNaoGerado as e:
+        print(f"[SOAP] Consulta {consulta_id}: SOAP invalido apos {e.tentativas} tentativas.")
+        return jsonify({"status": "error", "message": "A IA nao gerou um SOAP valido. Tente de novo.",
+                        "errors": e.erros}), 502
+    except Exception as e:
+        # So o tipo do erro no log: nunca o conteudo da consulta.
+        print(f"[SOAP] Falha no modelo para a consulta {consulta_id}: {type(e).__name__}")
+        if type(e).__name__ == "ResourceExhausted":
+            return _json_error("Limite de uso da IA atingido. Aguarde alguns minutos e tente de novo.", 429)
+        return _json_error("Nao foi possivel gerar o SOAP agora. Tente de novo.", 502)
+
+    documento = _soap().criar(
+        consulta_id,
+        resultado.soap.model_dump(mode="json"),
+        prompt_id=soap_gerador.PROMPT_ID,
+        prompt_versao=soap_gerador.PROMPT_VERSAO,
+    )
+    print(f"[SOAP] Consulta {consulta_id}: SOAP gerado em {resultado.tentativas} tentativa(s).")
+    return jsonify({
+        "status": "success",
+        "soap": _soap_para_o_medico(documento, consulta_id, mapa),
+        "tentativas": resultado.tentativas,
+    }), 201
+
+
 @app.route('/api/consultations/<consultation_id>/soap', methods=['GET'])
 @roles_required("administrador", "medico")
 def get_soap(consultation_id):
@@ -928,7 +1014,7 @@ def get_soap(consultation_id):
     documento = _soap().mais_recente(consulta_id)
     if documento is None:
         return _json_error("Nenhum SOAP gerado para esta consulta.", 404)
-    return jsonify({"status": "success", "soap": documento}), 200
+    return jsonify({"status": "success", "soap": _soap_para_o_medico(documento, consulta_id)}), 200
 
 
 @app.route('/api/consultations/<consultation_id>/soap/<soap_id>', methods=['PUT'])
@@ -939,7 +1025,7 @@ def save_soap_doctor_version(consultation_id, soap_id):
     A versao da IA nao muda. 400 com `errors` campo a campo se o SoapV1 for
     violado; 409 se o SOAP ja foi aprovado ou inserido no PEP.
     """
-    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    consulta_id, patient_id, erro = _consulta_da_gravacao(consultation_id)
     if erro:
         return erro
     repo = _soap()
@@ -950,13 +1036,16 @@ def save_soap_doctor_version(consultation_id, soap_id):
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or "versao_medico" not in data:
         return _json_error("Envie {\"versao_medico\": {...}}.", 400)
+    # O medico edita o texto reidratado; volta a ser tokenizado antes de gravar,
+    # com o mesmo mapa da consulta (o mesmo nome vira o mesmo token).
+    versao_medico, mapa = _anonimizar_estrutura_da_consulta(data["versao_medico"], patient_id, consulta_id)
     try:
-        documento = repo.salvar_edicao(soap_id, data["versao_medico"])
+        documento = repo.salvar_edicao(soap_id, versao_medico)
     except SoapInvalido as e:
         return jsonify({"status": "error", "message": str(e), "errors": e.erros}), 400
     except TransicaoInvalida as e:
         return _json_error(str(e), 409)
-    return jsonify({"status": "success", "soap": documento}), 200
+    return jsonify({"status": "success", "soap": _soap_para_o_medico(documento, consulta_id, mapa)}), 200
 
 
 # Rota para obter EXCLUSIVAMENTE o histórico de transcrições de áudio
