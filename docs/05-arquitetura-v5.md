@@ -57,7 +57,7 @@ API/
     anonymizer/         regex.py, ner.py, pseudonym_map.py, anonymize()
     llm/                provider.py (interface), gemini.py, prompts/ (PT-BR, versionados)
     transcription/      provider.py, gemini_audio.py, whisper.py, vosk_local.py, diarize.py
-    soap/               schema.py (SoapV1), diff.py (IA×médico, B44), generator.py, cid10.py (tabela embarcada)
+    soap/               schema.py (SoapV1), diff.py (IA×médico, B44), gerador.py + prompts/soap_v1.txt + material.py (B40), cid10.py (tabela embarcada)
     pdf.py, export.py
   models/               SQLAlchemy + Alembic (migrations/)
   scripts/              download_models.py, migrate_json_db.py, seed_dev.py
@@ -167,7 +167,7 @@ erDiagram
 | POST | `/api/consultations/<id>/audio/chunks` | multipart `audio_file` (wav ≤ 5 min), `recording_id`, `seq` | 202 `{seq, duration, replaced, received[]}`; reenviar a mesma `seq` substitui a parte |
 | POST | `/api/consultations/<id>/transcribe` | `recording_id`, `total_chunks?`, provedor? | transcrição com turnos + `chunks {received, missing, failed}`; apaga o áudio das partes |
 | POST | `/api/recommendations` (B38; mantida a rota existente, US020-CA001) | patient_id, consultation_id, janela_min? (1–120, padrão 5) | itens[] {tipo, texto} (≤ 5, ≤ 20 palavras), janela_min, transcricoes_usadas |
-| POST | `/api/consultations/<id>/soap` | — | `SoapV1` (versao_ia) |
+| POST | `/api/consultations/<id>/soap` (B40) | — | 201 com o SOAP gerado (versao_ia, reidratado), `tentativas`; 400 sem material; 502 com `errors` se inválido após 1 retry; 429 se a cota da IA esgotar |
 | GET | `/api/consultations/<id>/soap` (B44) | — | SOAP mais recente: `versao_ia`, `versao_medico`, `atual` e `diff` por seção (null sem edição) |
 | PUT | `/api/consultations/<id>/soap/<sid>` | versao_medico (SoapV1; B44), status (aprovação, B43) | SOAP com `diff`; 400 com `errors` por campo; 409 se aprovado |
 | GET | `/api/consultations/<id>/export?format=` | pdf \| md | arquivo |

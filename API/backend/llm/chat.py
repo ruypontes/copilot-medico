@@ -2,7 +2,8 @@
 
 Mesmas funcoes do antigo gemini_connection, usadas pelas rotas do server.py:
 send_message (chat, PDF, PEP) transforma qualquer falha numa mensagem para o
-medico, como antes; gerar_resposta_unica (recomendacoes, B38) levanta.
+medico, como antes; gerar_resposta_unica (recomendacoes do B38, SOAP do B40)
+levanta.
 """
 from repositories import MensagemRepository, sessao
 
@@ -23,14 +24,15 @@ def send_message(patient_id: str, consultation_id: str, message_text: str) -> st
         return MENSAGEM_ERRO.format(e)
 
 
-def gerar_resposta_unica(instrucao: str, conteudo: str) -> str:
+def gerar_resposta_unica(instrucao: str, conteudo: str, response_schema: dict | None = None) -> str:
     """Uma chamada avulsa, SEM o historico do chat da consulta, pedindo JSON.
 
-    Usada pelas recomendacoes (B38), que olham so a janela de transcricoes
-    enviada em `conteudo`. Diferente de send_message, levanta a excecao em
-    caso de falha: quem chama decide a resposta HTTP.
+    Usada pelas recomendacoes (B38) e pela geracao do SOAP (B40); com
+    `response_schema` (ADR-05) o Gemini segue a estrutura pedida. Diferente de
+    send_message, levanta a excecao em caso de falha: quem chama decide a
+    resposta HTTP.
     """
     provedor = obter_provedor()
     if provedor is None:
         raise LlmError("GEMINI_API_KEY não configurada")
-    return provedor.gerar(conteudo, instrucao=instrucao, formato_json=True)
+    return provedor.gerar(conteudo, instrucao=instrucao, schema=response_schema, formato_json=True)

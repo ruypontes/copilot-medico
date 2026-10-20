@@ -123,8 +123,9 @@ def _make_stub_chat_ia() -> types.ModuleType:
     def send_message(patient_id: str, consultation_id: str, message_text: str) -> str:
         return f"[stubbed AI reply] {message_text}"
 
-    def gerar_resposta_unica(instrucao: str, conteudo: str) -> str:
-        # Recomendacoes (B38): sem sugestoes por padrao; os testes trocam isto.
+    def gerar_resposta_unica(instrucao: str, conteudo: str, response_schema=None) -> str:
+        # Recomendacoes (B38) e SOAP (B40): resposta vazia por padrao; os
+        # testes que dependem do conteudo trocam isto.
         return '{"itens": []}'
 
     mod.send_message = send_message

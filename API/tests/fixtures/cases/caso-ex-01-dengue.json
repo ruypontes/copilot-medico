@@ -1,0 +1,59 @@
+{
+  "id": "caso-ex-01-dengue",
+  "sintetico": true,
+  "duracao_min": 12,
+  "prontuario": {
+    "peso": "70",
+    "altura": "1.75",
+    "tempe": "38.9",
+    "pas": "110",
+    "pad": "70",
+    "anamnese": "Febre ha 3 dias com dor atras dos olhos e dores no corpo."
+  },
+  "transcricao": [
+    {
+      "papel": "medico",
+      "texto": "Bom dia, Joana Prado Lima. O que a trouxe hoje?"
+    },
+    {
+      "papel": "paciente",
+      "texto": "Doutor, estou com febre alta ha tres dias, dor atras dos olhos e o corpo todo doendo. Meu telefone e (81) 98888-7766."
+    },
+    {
+      "papel": "medico",
+      "texto": "Teve manchas na pele, sangramento ou vomitos?"
+    },
+    {
+      "papel": "paciente",
+      "texto": "Nao tive manchas nem sangramento, so um enjoo. No bairro tem muitos casos de dengue."
+    },
+    {
+      "papel": "medico",
+      "texto": "Vou pedir hemograma e orientar hidratacao oral. Anote o CPF 111.444.777-35 no pedido."
+    }
+  ],
+  "pdfs": [
+    "hemograma-plaquetas-baixas.txt"
+  ],
+  "gabarito": {
+    "soap": {
+      "subjetivo": "Paciente relata febre alta ha tres dias, dor retro-orbitaria e mialgia difusa, com enjoo associado; nega manchas na pele, sangramentos e vomitos; refere casos de dengue no bairro onde mora.",
+      "objetivo": "Temperatura de 38,9 graus, pressao arterial 110 por 70 mmHg, peso de 70 quilos e altura de 1,75 metro; hemograma anexo com plaquetas abaixo do esperado, sem outros achados de exame fisico descritos.",
+      "avaliacao": "Sindrome febril aguda com quadro compativel com dengue, sem sinais de alarme referidos no momento da consulta, com plaquetopenia no hemograma que exige acompanhamento clinico e laboratorial proximo.",
+      "plano": "Solicitar hemograma de controle, orientar hidratacao oral abundante, uso de antitermico sem anti-inflamatorios, repouso e retorno imediato se surgirem sinais de alarme como dor abdominal intensa ou sangramentos."
+    },
+    "cid10": [
+      "A90"
+    ],
+    "cid10_capitulo": "I",
+    "pendencias_esperadas": [
+      "prova do laco",
+      "sinais de alarme"
+    ]
+  },
+  "pii_plantada": [
+    "Joana Prado Lima",
+    "111.444.777-35",
+    "(81) 98888-7766"
+  ]
+}

@@ -264,6 +264,20 @@ def test_gerar_resposta_unica_pede_json_sem_historico(monkeypatch):
     assert sdk.sessoes == []
 
 
+def test_gerar_resposta_unica_repassa_o_response_schema(monkeypatch):
+    # SOAP (B40 / ADR-05): o esquema do SoapV1 vai para o Gemini
+    chat = _chat_real()
+    sdk = _sdk_falso()
+    monkeypatch.setattr(chat, "obter_provedor", lambda: _provedor(sdk))
+    schema = {"type": "object", "properties": {"subjetivo": {"type": "string"}}}
+
+    chat.gerar_resposta_unica("instrucao SOAP", "material", schema)
+
+    config = sdk.geracoes[0]["config"]
+    assert config["response_schema"] == schema
+    assert config["response_mime_type"] == "application/json"
+
+
 def test_gerar_resposta_unica_levanta_em_falha(monkeypatch):
     chat = _chat_real()
     monkeypatch.setattr(chat, "obter_provedor", lambda: None)
