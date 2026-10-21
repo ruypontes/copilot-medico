@@ -1,0 +1,49 @@
+{
+  "id": "caso-ex-03-cefaleia",
+  "sintetico": true,
+  "prontuario": {
+    "peso": "60",
+    "altura": "1.62",
+    "pas": "118",
+    "pad": "76",
+    "anamnese": "Cefaleia recorrente ha dois meses."
+  },
+  "transcricao": [
+    {
+      "papel": "medico",
+      "texto": "Oi, Marina Alves Duarte. Conte-me sobre essa dor de cabeca."
+    },
+    {
+      "papel": "paciente",
+      "texto": "Doutor, ha dois meses tenho dor pulsatil de um lado so, com enjoo e incomodo com a luz, umas duas vezes por semana, nascida em 14/03/1992."
+    },
+    {
+      "papel": "medico",
+      "texto": "Alguma fraqueza, alteracao da fala ou piora subita?"
+    },
+    {
+      "papel": "paciente",
+      "texto": "Nao, nada disso. Melhora quando deito no escuro e tomo dipirona."
+    }
+  ],
+  "gabarito": {
+    "soap": {
+      "subjetivo": "Paciente jovem refere cefaleia pulsatil unilateral ha dois meses, cerca de duas vezes por semana, com nausea e fotofobia, aliviada ao repousar no escuro e com dipirona; nega fraqueza, alteracao da fala ou piora subita.",
+      "objetivo": "Pressao arterial de 118 por 76 mmHg, peso de 60 quilos e altura de 1,62 metro; sem alteracoes neurologicas relatadas na consulta e sem exames complementares disponiveis para avaliacao neste atendimento.",
+      "avaliacao": "Quadro de cefaleia recorrente com caracteristicas de enxaqueca sem aura, sem sinais de alarme neurologicos referidos, merecendo orientacao sobre gatilhos e acompanhamento da frequencia das crises ao longo das proximas semanas.",
+      "plano": "Orientar diario de cefaleia para identificar gatilhos, manter analgesico no inicio da crise, evitar uso excessivo de analgesicos, discutir terapia preventiva se a frequencia aumentar e retornar em quatro semanas ou antes se surgirem sinais de alarme."
+    },
+    "cid10": [
+      "G43"
+    ],
+    "cid10_capitulo": "VI",
+    "pendencias_esperadas": [
+      "exame neurologico",
+      "gatilhos"
+    ]
+  },
+  "pii_plantada": [
+    "Marina Alves Duarte",
+    "14/03/1992"
+  ]
+}
