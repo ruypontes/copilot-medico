@@ -13,10 +13,6 @@ except ImportError:
     # Fallback para caso rode o script fora da estrutura de pacotes
     from processador_voz import TranscritorVoz
 
-# --- CONFIGURAÇÃO DE TESTE ---
-MODO_TESTE_SOZINHO = False
-
-
 class Diarizador:
     """
     Integração: Vosk (Diarização) + TranscritorVoz (Google Speech).
@@ -31,8 +27,6 @@ class Diarizador:
         SetLogLevel(-1)  # Logs limpos
 
         print("[AUDIO_SERVICE] Carregando modelos IA (Logs ocultos)...")
-        if MODO_TESTE_SOZINHO:
-            print("⚠️ ATENÇÃO: MODO DE TESTE ATIVADO (ALTERNÂNCIA FORÇADA) ⚠️")
 
         self.model = Model(model_path)
         self.spk_model = SpkModel(spk_model_path)
@@ -114,6 +108,7 @@ class Diarizador:
         total_bytes = len(raw_pcm)
 
         final_dialogue = []
+        vosk_fallback_used = False
 
         for seg in merged_segments:
             padding = 0.4
@@ -143,6 +138,8 @@ class Diarizador:
                 text_final = seg.get('text_combined', '')
 
             if text_final and len(text_final.strip()) > 1:
+                if not texto_google:
+                    vosk_fallback_used = True
                 text_final = text_final[0].upper() + text_final[1:]
 
                 final_dialogue.append({
@@ -158,7 +155,8 @@ class Diarizador:
         return {
             "full_text": full_text,
             "dialogue": final_dialogue,
-            "speakers_count": len(unique_ids)
+            "speakers_count": len(unique_ids),
+            "used_fallback": vosk_fallback_used
         }
 
 

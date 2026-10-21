@@ -41,6 +41,11 @@ function outcomeNotices(result: RecordingResult): string[] {
   if (result.stopReason === "device") {
     notices.push("🎙️ O microfone foi desconectado: a gravação foi encerrada nesse ponto.");
   }
+  if (result.usedFallback) {
+    notices.push(
+      "⚠️ A transcrição utilizou um provedor alternativo (fallback). Revise o texto com atenção, pois a precisão pode ser menor."
+    );
+  }
   if (result.missingChunks.length > 0) {
     notices.push(
       `⚠️ Parte(s) ${result.missingChunks.join(", ")} do áudio não foram enviadas ou transcritas: a transcrição pode estar incompleta.`
