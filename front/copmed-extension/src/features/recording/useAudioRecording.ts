@@ -139,8 +139,14 @@ export function useAudioRecording({
     setHasRecordedAudio(true);
     if (result.logEntry) addTranscription(result.logEntry); // Atualiza lista visual de logs
     handleSendMessage(result.transcription); // Envia transcrição para o fluxo de chat
-  }, [result, consultationId, patientId, addTranscription,patientId,
-updateTranscription, handleSendMessage]);
+   }, [
+    result,
+    consultationId,
+    patientId,
+    addTranscription,
+    updateTranscription,
+    handleSendMessage,
+  ]);
 
   // --- Função para iniciar gravação ---
   const startAudioRecording = useCallback(async () => {
