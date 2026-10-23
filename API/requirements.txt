@@ -16,3 +16,4 @@ psycopg[binary]>=3.1,<4
 SpeechRecognition
 numpy
 vosk
+reportlab>=4,<6

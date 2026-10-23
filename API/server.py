@@ -2,8 +2,9 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from flask import Flask, g, request, jsonify
+from flask import Flask, g, request, jsonify, send_file
 from flask_cors import CORS
+from io import BytesIO
 import speech_recognition as sr
 
 # Assuming these imports are correct and available
@@ -1060,6 +1061,189 @@ def save_soap_doctor_version(consultation_id, soap_id):
         return _json_error(str(e), 409)
     return jsonify({"status": "success", "soap": _soap_para_o_medico(documento, consulta_id, mapa)}), 200
 
+def _soap_export_markdown(soap, identificacao=None):
+    """Monta uma representacao Markdown do SOAP para exportacao."""
+    secoes = [
+        ("Subjetivo", soap.get("subjetivo")),
+        ("Objetivo", soap.get("objetivo")),
+        ("Avaliacao", soap.get("avaliacao")),
+        ("Plano", soap.get("plano")),
+    ]
+
+    linhas = ["# Relatorio SOAP", ""]
+
+    if identificacao:
+        linhas.extend([
+            "## Identificacao",
+            "",
+            identificacao,
+            "",
+        ])
+
+    for titulo, conteudo in secoes:
+        linhas.extend([
+            f"## {titulo}",
+            "",
+            str(conteudo or "Nao informado"),
+            "",
+        ])
+
+    hipoteses = soap.get("hipoteses") or []
+    linhas.extend(["## Hipoteses diagnosticas", ""])
+    if hipoteses:
+        for hipotese in hipoteses:
+            descricao = hipotese.get("descricao", "Nao informada")
+            cid10 = hipotese.get("cid10")
+            confianca = hipotese.get("confianca")
+
+            detalhe = descricao
+            if cid10:
+                detalhe += f" (CID-10: {cid10})"
+            if confianca:
+                detalhe += f" — Confianca: {confianca}"
+
+            linhas.append(f"- {detalhe}")
+    else:
+        linhas.append("- Nenhuma hipotese registrada.")
+    linhas.append("")
+
+    for chave, titulo in (
+        ("alertas", "Alertas"),
+        ("pendencias", "Pendencias"),
+    ):
+        linhas.extend([f"## {titulo}", ""])
+        itens = soap.get(chave) or []
+        if itens:
+            linhas.extend(f"- {item}" for item in itens)
+        else:
+            linhas.append("- Nenhum item registrado.")
+        linhas.append("")
+
+    return "\n".join(linhas)
+
+
+@app.route(
+    "/api/consultations/<consultation_id>/soap/export",
+    methods=["GET"],
+)
+@roles_required("administrador", "medico")
+def exportar_soap(consultation_id):
+    """Exporta o SOAP atual em Markdown ou PDF."""
+    consulta_id, patient_id, erro = _consulta_da_gravacao(
+        consultation_id
+    )
+    if erro:
+        return erro
+
+    formato = request.args.get("format", "markdown").strip().lower()
+    if formato not in {"markdown", "pdf"}:
+        return _json_error(
+            "Formato invalido. Use 'markdown' ou 'pdf'.",
+            400,
+        )
+
+    documento = _soap().mais_recente(consulta_id)
+    if not documento:
+        return _json_error(
+            "SOAP nao encontrado para esta consulta.",
+            404,
+        )
+
+    # Prioriza a versao editada pelo medico.
+    soap = documento.get("versao_medico") or documento.get("versao_ia")
+    if not isinstance(soap, dict):
+        return _json_error("Conteudo SOAP invalido.", 500)
+
+    incluir_identificacao = request.args.get(
+        "include_identification", "false"
+    ).strip().lower() in {"true", "1", "sim", "yes"}
+
+    identificacao = None
+
+    # Sem cofre aberto, nao tenta recuperar dados reais.
+    # O documento permanece anonimizado.
+    if incluir_identificacao:
+        cofre = _cofre_atual()
+        if cofre is not None:
+            mapa = _mapas_anonimizacao().carregar(consulta_id, cofre)
+            soap = _reidratar(soap, mapa)
+
+            paciente = _pacientes().obter(patient_id)
+            if paciente:
+                identificacao = paciente.get("name")
+
+    markdown = _soap_export_markdown(
+        soap,
+        identificacao=identificacao,
+    )
+
+    if formato == "markdown":
+        conteudo = BytesIO(markdown.encode("utf-8"))
+        return send_file(
+            conteudo,
+            mimetype="text/markdown; charset=utf-8",
+            as_attachment=True,
+            download_name="relatorio-soap.md",
+        )
+
+    # Imports locais: o ReportLab so e necessario para exportacao PDF.
+    from xml.sax.saxutils import escape
+
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+    )
+
+    pdf_buffer = BytesIO()
+    estilos = getSampleStyleSheet()
+    elementos = []
+
+    for linha in markdown.splitlines():
+        if linha.startswith("# "):
+            elementos.append(
+                Paragraph(escape(linha[2:]), estilos["Title"])
+            )
+        elif linha.startswith("## "):
+            elementos.append(
+                Paragraph(escape(linha[3:]), estilos["Heading2"])
+            )
+        elif linha.startswith("- "):
+            elementos.append(
+                Paragraph(
+                    "&bull; " + escape(linha[2:]),
+                    estilos["BodyText"],
+                )
+            )
+        elif linha.strip():
+            elementos.append(
+                Paragraph(escape(linha), estilos["BodyText"])
+            )
+        else:
+            elementos.append(Spacer(1, 0.2 * cm))
+
+    documento_pdf = SimpleDocTemplate(
+        pdf_buffer,
+        pagesize=A4,
+        rightMargin=2 * cm,
+        leftMargin=2 * cm,
+        topMargin=2 * cm,
+        bottomMargin=2 * cm,
+        title="Relatorio SOAP",
+    )
+    documento_pdf.build(elementos)
+
+    pdf_buffer.seek(0)
+    return send_file(
+        pdf_buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name="relatorio-soap.pdf",
+    )
 
 # Rota para obter EXCLUSIVAMENTE o histórico de transcrições de áudio
 @app.route('/api/patients/<patient_id>/transcription-log', methods=['GET'])
