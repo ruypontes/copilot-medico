@@ -10,7 +10,7 @@ import NewPatientModal from "../patients/NewPatientModal";
 import ImportHistoryModal from "../patients/ImportHistoryModal";
 import { useAudioRecording } from "../recording/useAudioRecording";
 import RecordingPanel from "../recording/RecordingPanel";
-import SuggestionsPanel from "../recommendations/SuggestionsPanel";
+import SoapEditor from "./SoapEditor";
 
 // --- Componente Principal Autenticado ---
 // Guarda o paciente e a consulta ativos e compõe as features de pacientes, chat e gravação.
@@ -77,7 +77,8 @@ export default function AuthenticatedApp({ onLogout }: { onLogout: () => void })
 
       {/* Com uma gravação em curso o painel fica visível mesmo sem consulta aberta, para poder pará-la */}
       {(consultationId || recording.isActive) && <RecordingPanel recording={recording} />}
-      {consultationId && <SuggestionsPanel patientId={patientId} consultationId={consultationId} />}
+
+      <SoapEditor consultationId={consultationId} />
 
       {/* Main Chat Area */}
       <div className="chat-container">

@@ -68,9 +68,42 @@ def build_openapi_spec():
         "info": {
             "title": "CoPilot Medico API",
             "version": "5.0.0-dev",
-            "description": "Contrato de importacao de dados do PEP (pep-import).",
+            "description": "Contratos de importacao do PEP e busca local da CID-10.",
         },
         "paths": {
+            "/api/cid10": {
+                "get": {
+                    "operationId": "searchCid10",
+                    "summary": "Busca códigos e descrições na CID-10 brasileira",
+                    "security": security,
+                    "parameters": [
+                        {
+                            "name": "q",
+                            "in": "query",
+                            "required": True,
+                            "schema": {"type": "string", "minLength": 1},
+                            "description": "Trecho de um código ou de uma descrição.",
+                        },
+                        {
+                            "name": "limit",
+                            "in": "query",
+                            "required": False,
+                            "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+                        },
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Resultados encontrados no catálogo local.",
+                            "content": {"application/json": {
+                                "schema": {"$ref": "#/components/schemas/CID10BuscaResposta"},
+                            }},
+                        },
+                        "400": _error_response("Parâmetros de busca inválidos."),
+                        "401": _error_response("Token ausente ou inválido."),
+                        "403": _error_response("Perfil sem permissão."),
+                    },
+                },
+            },
             "/api/consultations/{consultation_id}/pep-import": {
                 "post": {
                     "operationId": "pepImport",
@@ -135,6 +168,26 @@ def build_openapi_spec():
         "components": {
             "securitySchemes": {"bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}},
             "schemas": {
+                "CID10BuscaResposta": {
+                    "type": "object",
+                    "required": ["status", "query", "count", "results"],
+                    "properties": {
+                        "status": {"type": "string", "enum": ["success"]},
+                        "query": {"type": "string"},
+                        "count": {"type": "integer"},
+                        "results": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["code", "description"],
+                                "properties": {
+                                    "code": {"type": "string"},
+                                    "description": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                },
                 "PepImportRequisicao": {
                     "type": "object",
                     "required": ["pep_origem", "campos"],

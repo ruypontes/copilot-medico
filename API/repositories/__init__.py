@@ -6,12 +6,11 @@ repositorio recebe uma sessao SQLAlchemy; na aplicacao a sessao vem de
 """
 from . import sessao
 from .anonimizacao import MapaAnonimizacaoRepository
-from .consultas import ConsultaRepository, MensagemRepository
+from .consultas import ConsultaRepository, DocumentoSoapRepository, MensagemRepository
 from .medicos import MedicoRepository
 from .pacientes import MedicoNaoEncontrado, PacienteRepository
 from .partes_audio import ParteAudioRepository
 from .registros import DadoExtensaoRepository, TranscricaoRepository
-from .soap import DocumentoSoapRepository, TransicaoInvalida
 
 __all__ = [
     "ConsultaRepository",
@@ -24,6 +23,5 @@ __all__ = [
     "PacienteRepository",
     "ParteAudioRepository",
     "TranscricaoRepository",
-    "TransicaoInvalida",
     "sessao",
 ]

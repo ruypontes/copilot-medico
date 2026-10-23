@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
-from models import Consulta, Mensagem, Paciente, PapelMensagem
+from models import Consulta, DocumentoSoap, Mensagem, Paciente, PapelMensagem, StatusSoap
 
 from .base import Repositorio, como_utc, id_texto, iso, parse_data, parse_uuid
 
@@ -25,6 +25,18 @@ def mensagem_para_dicionario(mensagem: Mensagem) -> dict:
 def _texto_da_mensagem(mensagem: dict) -> str:
     partes = mensagem.get("parts") or []
     return "".join(p.get("text", "") for p in partes if isinstance(p, dict))
+
+
+def documento_soap_para_dicionario(documento: DocumentoSoap) -> dict:
+    return {
+        "id": id_texto(documento.id),
+        "consultation_id": id_texto(documento.consulta_id),
+        "versao_ia": documento.versao_ia,
+        "versao_medico": documento.versao_medico,
+        "status": documento.status.value,
+        "criado_em": iso(documento.criado_em),
+        "aprovado_em": iso(documento.aprovado_em),
+    }
 
 
 class MensagemRepository(Repositorio):
@@ -62,6 +74,63 @@ class MensagemRepository(Repositorio):
         if ultimo is not None and como_utc(ultimo) >= agora:
             return como_utc(ultimo) + _UM_MICROSSEGUNDO
         return agora
+
+
+class DocumentoSoapRepository(Repositorio):
+    def mais_recente(self, consulta_id) -> dict | None:
+        cid = parse_uuid(consulta_id)
+        if cid is None:
+            return None
+        documento = self.sessao.scalar(
+            select(DocumentoSoap)
+            .where(DocumentoSoap.consulta_id == cid)
+            .order_by(DocumentoSoap.criado_em.desc())
+        )
+        return documento_soap_para_dicionario(documento) if documento else None
+
+    def criar(self, consulta_id, versao_ia: dict) -> dict | None:
+        cid = parse_uuid(consulta_id)
+        if cid is None or self.sessao.get(Consulta, cid) is None:
+            return None
+        documento = DocumentoSoap(consulta_id=cid, versao_ia=versao_ia)
+        self.sessao.add(documento)
+        self.sessao.commit()
+        return documento_soap_para_dicionario(documento)
+
+    def atualizar(self, consulta_id, documento_id, versao_medico: dict) -> dict | None:
+        cid, did = parse_uuid(consulta_id), parse_uuid(documento_id)
+        if cid is None or did is None:
+            return None
+        documento = self.sessao.scalar(
+            select(DocumentoSoap).where(
+                DocumentoSoap.id == did,
+                DocumentoSoap.consulta_id == cid,
+            )
+        )
+        if documento is None or documento.status == StatusSoap.APROVADO:
+            return None
+        documento.versao_medico = versao_medico
+        documento.status = StatusSoap.EDITADO
+        self.sessao.commit()
+        return documento_soap_para_dicionario(documento)
+
+    def aprovar(self, consulta_id, documento_id) -> dict | None:
+        cid, did = parse_uuid(consulta_id), parse_uuid(documento_id)
+        if cid is None or did is None:
+            return None
+        documento = self.sessao.scalar(
+            select(DocumentoSoap).where(
+                DocumentoSoap.id == did,
+                DocumentoSoap.consulta_id == cid,
+            )
+        )
+        if documento is None:
+            return None
+        if documento.status != StatusSoap.APROVADO:
+            documento.status = StatusSoap.APROVADO
+            documento.aprovado_em = datetime.now(timezone.utc)
+            self.sessao.commit()
+        return documento_soap_para_dicionario(documento)
 
 
 class ConsultaRepository(Repositorio):
