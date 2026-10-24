@@ -124,17 +124,6 @@ novo.
 
 ![Etapa 2: cadastrar instalador](anexos/esus-pec/02-cadastrar-instalador.png)
 
-### Imagem pronta (sem o instalador)
-
-Quem não tem o `.jar` pode usar a imagem já construída no Docker Hub. O volume
-é o mesmo do compose, para os cadastros sobreviverem ao container:
-
-```bash
-docker run -d --name esus -p 8081:8080 --memory 2560m --restart unless-stopped \
-  -v esus-pec-data:/opt/e-SUS/database/postgresql-9.6.13-1-linux-x64/data \
-  rafaelluna2410/esus-pec:5.5.28-slim
-```
-
 A instalação de treinamento apaga o que foi digitado depois de 10 dias.
 
 ### Preparar um atendimento de teste (B50)
