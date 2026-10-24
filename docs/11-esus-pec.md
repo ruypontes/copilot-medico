@@ -194,16 +194,6 @@ Seletores usados pelo adaptador, conferidos no PEC 5.5.28:
 | Campos do SOAP | `[data-testid]` `textFieldSubjetivo`, `observacoesObjetivo`, `TextFieldObservacaoAvaliacao`, `textFieldPlano` |
 | Editor | Draft.js: a escrita usa um evento `paste`, que o editor trata como colagem do médico |
 
-Evidência do teste no PEC local (B50): SOAP vazio antes, leitura do cabeçalho e
-escrita nos quatro campos (o painel azul foi injetado só para mostrar o retorno
-das funções no print), e o texto mantido depois de trocar de aba.
-
-![Testes automatizados do adaptador](anexos/esus-pec/b50/1_testes_automatizados.jpg)
-![Antes: SOAP vazio](anexos/esus-pec/b50/2_pec_antes_soap_vazio.jpg)
-![Depois: leitura do cabeçalho e Subjetivo/Objetivo escritos](anexos/esus-pec/b50/3_pec_depois_leitura_e_escrita_S_O.jpg)
-![Depois: Avaliação e Plano escritos](anexos/esus-pec/b50/4_pec_depois_escrita_A_P.jpg)
-![Texto mantido após trocar de aba](anexos/esus-pec/b50/5_pec_texto_mantido_apos_trocar_aba.jpg)
-
 ### Parar / remover
 
 Com o compose (na raiz do projeto):
