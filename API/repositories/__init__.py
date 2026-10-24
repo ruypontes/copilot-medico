@@ -10,17 +10,22 @@ from .auditoria import AuditoriaEnvioRepository
 from .consultas import ConsultaRepository, MensagemRepository
 from .medicos import MedicoRepository
 from .pacientes import MedicoNaoEncontrado, PacienteRepository
+from .partes_audio import ParteAudioRepository
 from .registros import DadoExtensaoRepository, TranscricaoRepository
+from .soap import DocumentoSoapRepository, TransicaoInvalida
 
 __all__ = [
     "AuditoriaEnvioRepository",
     "ConsultaRepository",
     "DadoExtensaoRepository",
+    "DocumentoSoapRepository",
     "MapaAnonimizacaoRepository",
     "MedicoNaoEncontrado",
     "MedicoRepository",
     "MensagemRepository",
     "PacienteRepository",
+    "ParteAudioRepository",
     "TranscricaoRepository",
+    "TransicaoInvalida",
     "sessao",
 ]

@@ -1,19 +1,25 @@
 import os
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta, timezone
 
 from flask import Flask, g, has_request_context, request, jsonify
 from flask_cors import CORS
-import tempfile
 import speech_recognition as sr
 
 # Assuming these imports are correct and available
+from backend import audio_chunks
 from backend import gemini_connection
+from backend import limpeza_audio
 from backend import pdf_reader
 from backend import pep_import
+from backend import recomendacoes
+from backend.soap import gerador as soap_gerador
+from backend.soap.material import montar_material
 from backend.anonimizacao import MapaAnonimizacao, anonimizar, anonimizar_estrutura
 from backend.anonimizacao import servico as anonimizacao_servico
 from backend.openapi import build_openapi_spec
 from backend.pep_import import PepImportError
+from backend.soap import SoapInvalido
 from backend.auth_decorators import roles_required, token_required
 from backend.auth_service import (
     AuthError,
@@ -45,11 +51,14 @@ from repositories import (
     AuditoriaEnvioRepository,
     ConsultaRepository,
     DadoExtensaoRepository,
+    DocumentoSoapRepository,
     MapaAnonimizacaoRepository,
     MedicoNaoEncontrado,
     MensagemRepository,
     PacienteRepository,
+    ParteAudioRepository,
     TranscricaoRepository,
+    TransicaoInvalida,
     sessao,
 )
 from repositories.auditoria import (
@@ -62,13 +71,21 @@ from repositories.auditoria import (
 )
 from backend.processador_voz.processador_voz import TranscritorVoz
 from backend.audio_service import Diarizador
+from backend.transcription import obter_provedor
 
 
 def get_cors_origins():
     configured_origins = settings.cors_origins.strip()
+
+    # Configuracao vazia ou "*" nao deve liberar todas as origens.
     if not configured_origins or configured_origins == "*":
-        return "*"
-    return [origin.strip() for origin in configured_origins.split(",") if origin.strip()]
+        return []
+
+    return [
+        origin.strip().rstrip("/")
+        for origin in configured_origins.split(",")
+        if origin.strip()
+    ]
 
 
 app = Flask(__name__)
@@ -184,6 +201,8 @@ def _descarregar_envios_audio(consultation_id=None):
 
 # Todo envio de audio ao Google (diarizacao e fallback) passa pelo TranscritorVoz.
 TranscritorVoz.auditor = _registrar_envio_audio
+def _partes_audio():
+    return ParteAudioRepository(sessao.obter_sessao())
 
 
 def _token_da_requisicao():
@@ -222,6 +241,10 @@ def _anonimizar_para_envio(texto, patient_id=None, consultation_id=None):
 
 
 def _anonimizar_conteudo_extensao(conteudo, patient_id=None, consultation_id=None):
+    return _anonimizar_estrutura_da_consulta(conteudo, patient_id, consultation_id)[0]
+
+
+def _anonimizar_estrutura_da_consulta(conteudo, patient_id=None, consultation_id=None):
     """Anonimiza a estrutura raspada do prontuario antes de PERSISTI-LA (B69).
 
     `_anonimizar_para_envio` cobre o texto que sai para o LLM; este cobre o
@@ -252,7 +275,7 @@ def _anonimizar_conteudo_extensao(conteudo, patient_id=None, consultation_id=Non
 
     if consultation_id and mapa_final is not None:
         _mapas_anonimizacao().salvar(consultation_id, mapa_final, cofre)
-    return conteudo_anonimo
+    return conteudo_anonimo, mapa_final or mapa
 
 
 def _anonimizar_transcricao(texto, turnos, patient_id=None, consultation_id=None):
@@ -352,6 +375,12 @@ except Exception as e:
     print(f"⚠️ AVISO: Falha ao carregar Diarizador: {e}")
     print("   -> O sistema funcionará apenas com Transcrição Simples.")
     audio_processor = None
+
+# Provedor do .env (TRANSCRIPTION_PROVIDER, B31): Gemini audio por padrao.
+# None ("vosk" ou sem chave) deixa so o Diarizador acima.
+transcription_provider = obter_provedor()
+if transcription_provider:
+    print(f"✅ Provedor de transcrição: {transcription_provider.nome}")
 
 
 def _json_error(message, status_code):
@@ -502,6 +531,7 @@ def health_check():
         "status": "success",
         "service": "copilot-medico-api",
         "diarizer_loaded": audio_processor is not None,
+        "transcription_provider": getattr(transcription_provider, "nome", None),
     }), 200
 
 
@@ -734,6 +764,57 @@ def reject_doctor_request_api(user_id):
     }), 200
 
 
+# Respostas do transcritor para silencio/ruido: nao viram transcricao salva.
+FRASES_DE_AUDIO_INVALIDO = (
+    "Não foi possível entender o áudio",
+    "Erro na API de reconhecimento",
+)
+
+
+def _transcrever_arquivo(caminho, duracao=0.0):
+    """Transcreve um WAV e devolve (texto, turnos, duracao_s, used_fallback)."""
+    processadores = [p for p in (transcription_provider, audio_processor) if p]
+    provedor_principal_falhou = False
+
+    for processador in processadores:
+        nome = getattr(processador, 'nome', '') or 'Diarizador (Vosk + Google)'
+        try:
+            print(f"[TRANSCRICAO] Iniciando com {nome}...")
+            result = processador.processar_audio(caminho)
+            turnos = result['dialogue']
+
+            if not result['full_text'].strip():
+                return FRASES_DE_AUDIO_INVALIDO[0] + ".", None, duracao, False
+
+            if duracao == 0:
+                duracao = result.get('duration') or 0
+            if duracao == 0 and turnos:
+                duracao = turnos[-1].get('end', 0)
+
+            used_fallback = bool(result.get('used_fallback', False))
+            if processador is audio_processor and provedor_principal_falhou:
+                used_fallback = True
+
+            print(f"[TRANSCRICAO] {nome} concluido com sucesso.")
+            return result['full_text'], turnos, duracao, used_fallback
+
+        except Exception as e:
+            print(f"Erro em {nome}: {e}. Tentando o proximo...")
+            if processador is transcription_provider:
+                provedor_principal_falhou = True
+
+    print("[TRANSCRICAO] Usando Transcritor Simples (Legacy)...")
+    transcritor = TranscritorVoz(idioma="pt-BR")
+    with sr.AudioFile(caminho) as source:
+        audio_data = transcritor.reconhecedor.record(source)
+        if duracao == 0:
+            duracao = (
+                len(audio_data.frame_data)
+                / audio_data.sample_rate
+                / audio_data.sample_width
+            )
+        return transcritor.transcrever(audio_data), None, duracao, True
+
 @app.route('/api/transcribe_audio', methods=['POST'])
 @roles_required("administrador", "medico")
 def transcribe_audio_route():
@@ -768,69 +849,19 @@ def transcribe_audio_route():
         if consultation_id and not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return jsonify({"status": "error", "message": "Consulta nao encontrada para este paciente."}), 404
 
-        file_ext = '.wav'
-        if audio_file.filename and '.' in audio_file.filename:
-            file_ext = '.' + audio_file.filename.split('.')[-1]
+        # Na mesma base das partes (B35): o job diario acha o arquivo se o
+        # processo cair antes do finally abaixo.
+        tmp_path = audio_chunks.salvar_avulso(audio_file, audio_file.filename)
 
-        with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
-            tmp_path = tmp.name
-            audio_file.save(tmp_path)
-            print(f"[TRANSCRIÇÃO] Áudio salvo em: {tmp_path}")
-
-        # Variáveis de resultado
-        texto_final = ""
-        dialogue_structure = None
-        final_duration = duration_input
-
-        # 3. Processamento (Tentativa de Diarização Inteligente)
-        processed_successfully = False
-
-        if audio_processor:
-            try:
-                print("[TRANSCRIÇÃO] Iniciando Diarização (Vosk + Google)...")
-                # Aqui chamamos sua classe Diarizador
-                result = audio_processor.processar_audio(tmp_path)
-
-                texto_final = result['full_text']
-                dialogue_structure = result['dialogue']  # Estrutura JSON rica (Médico/Paciente)
-
-                # Se a duração veio 0 do front, tentamos estimar (opcional, mas o Vosk não retorna duration total fácil)
-                if final_duration == 0 and dialogue_structure:
-                    # Pega o fim do último segmento como duração aproximada
-                    final_duration = dialogue_structure[-1].get('end', 0) if len(dialogue_structure) > 0 else 0
-
-                processed_successfully = True
-                print("[TRANSCRIÇÃO] Diarização concluída com sucesso.")
-            except Exception as e:
-                print(f"❌ Erro na Diarização: {e}. Tentando fallback simples...")
-                processed_successfully = False
-
-        # 4. Fallback (Transcrição Simples) se o Diarizador falhar ou não existir
-        if not processed_successfully:
-            print("[TRANSCRIÇÃO] Usando Transcritor Simples (Legacy)...")
-            try:
-                transcritor = TranscritorVoz(idioma="pt-BR")
-                with sr.AudioFile(tmp_path) as source:
-                    audio_data = transcritor.reconhecedor.record(source)
-                    # Calcula duração se não tiver
-                    if final_duration == 0:
-                        final_duration = len(audio_data.frame_data) / audio_data.sample_rate / audio_data.sample_width
-
-                    texto_final = transcritor.transcrever(audio_data)
-                    dialogue_structure = None  # Não tem estrutura de médico/paciente
-            except Exception as e_simple:
-                print(f"❌ Erro fatal também na transcrição simples: {e_simple}")
-                raise e_simple
+        # 3 e 4. Diarização inteligente ou, se falhar/não existir, transcrição simples
+        texto_final, dialogue_structure, final_duration, used_fallback = _transcrever_arquivo(tmp_path, duration_input)
 
         # 5. Validação de Erro de Áudio (Silêncio/Ruído)
-        invalid_phrases = [
-            "Não foi possível entender o áudio",
-            "Erro na API de reconhecimento"
-        ]
-        if any(phrase in texto_final for phrase in invalid_phrases):
+        if any(phrase in texto_final for phrase in FRASES_DE_AUDIO_INVALIDO):
             return jsonify({
                 "status": "success",
                 "transcription": texto_final,
+                "used_fallback": used_fallback,
                 "is_error": True
             }), 200
 
@@ -860,6 +891,7 @@ def transcribe_audio_route():
             "transcription": texto_final,
             "consultation_id": consultation_id,
             "log_entry": _reidratar_transcricao(log_entry, mapa),  # O frontend renderiza colorido
+            "used_fallback": used_fallback,
             "is_error": False
         }), 200
 
@@ -893,6 +925,144 @@ def get_transcription_log_api(patient_id):
     except Exception as e:
         print(f"Erro ao buscar logs: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+@app.route(
+    '/api/patients/<patient_id>/transcription-log/<transcription_id>',
+    methods=['PATCH']
+)
+@roles_required("administrador", "medico")
+def update_transcription_roles_api(patient_id, transcription_id):
+    try:
+        # Verifica se o usuário autenticado pode acessar este paciente.
+        _patient_data, access_error = require_patient_access(patient_id)
+        if access_error:
+            return access_error
+
+        data = request.get_json(silent=True)
+
+        if not isinstance(data, dict):
+            return jsonify({
+                "status": "error",
+                "message": "Corpo JSON inválido."
+            }), 400
+
+        papeis = data.get("roles")
+
+        papeis_validos = {"Médico", "Paciente", "Outro"}
+
+        if (
+            not isinstance(papeis, list)
+            or not all(
+                isinstance(papel, str) and papel in papeis_validos
+                for papel in papeis
+            )
+        ):
+            return jsonify({
+                "status": "error",
+                "message": "Envie uma lista válida de papéis."
+            }), 400
+
+        transcricao = _transcricoes().atualizar_papeis(
+            patient_id,
+            transcription_id,
+            papeis,
+        )
+
+        if transcricao is None:
+            return jsonify({
+                "status": "error",
+                "message": "Transcrição não encontrada ou dados incompatíveis."
+            }), 404
+
+        return jsonify({
+            "status": "success",
+            "message": "Papéis atualizados com sucesso.",
+            "log": transcricao,
+        }), 200
+
+    except ValueError as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 400
+
+    except Exception as e:
+        print(f"Erro ao atualizar papéis da transcrição: {e}")
+        return jsonify({
+            "status": "error",
+            "message": "Erro interno ao atualizar a transcrição."
+        }), 500
+
+
+@app.route(
+    '/api/patients/<patient_id>/transcription-log/<transcription_id>/turns/<int:turn_index>',
+    methods=['PATCH']
+)
+@roles_required("administrador", "medico")
+def update_transcription_turn_role_api(
+    patient_id, transcription_id, turn_index
+):
+    try:
+        # Verifica se o usuário autenticado pode acessar este paciente.
+        _patient_data, access_error = require_patient_access(patient_id)
+        if access_error:
+            return access_error
+
+        data = request.get_json(silent=True)
+
+        if not isinstance(data, dict):
+            return jsonify({
+                "status": "error",
+                "message": "Corpo JSON inválido."
+            }), 400
+
+        role = data.get("role")
+        roles_validos = {"medico", "paciente", "outro"}
+
+        if not isinstance(role, str) or role not in roles_validos:
+            return jsonify({
+                "status": "error",
+                "message": "Envie um papel válido."
+            }), 400
+
+        transcricao = _transcricoes().atualizar_papel_turno(
+            patient_id,
+            transcription_id,
+            turn_index,
+            role,
+        )
+
+        if transcricao is None:
+            return jsonify({
+                "status": "error",
+                "message": "Transcrição ou turno não encontrado."
+            }), 404
+
+        return jsonify({
+            "status": "success",
+            "message": "Papel do turno atualizado com sucesso.",
+            "log": transcricao,
+        }), 200
+
+    except ValueError as e:
+        mensagem = str(e)
+
+        if mensagem == "Turno não encontrado.":
+            return jsonify({
+                "status": "error",
+                "message": mensagem,
+            }), 404
+
+        return jsonify({
+            "status": "error",
+            "message": mensagem,
+        }), 400
+
+    except Exception as e:
+        print(f"Erro ao atualizar papel do turno: {e}")
+        return jsonify({
+            "status": "error",
+            "message": "Erro interno ao atualizar o turno."
+        }), 500
 
 @app.route('/api/audit/external-sends', methods=['GET'])
 @roles_required("administrador")
@@ -1405,45 +1575,31 @@ def get_all_patients():
 @app.route('/api/recommendations', methods=['POST'])
 @roles_required("administrador", "medico")
 def handle_recommendations():
+    """Sugestoes curtas sobre a janela parcial da consulta (B38 / US020).
+
+    JSON: patient_id, consultation_id e janela_min (opcional, padrao 5).
+    Usa so as transcricoes da consulta gravadas nos ultimos `janela_min`
+    minutos - nao o chat inteiro. O texto sai anonimizado (US016), volta
+    reidratado para o medico ler, e NADA e gravado no prontuario (US020-CA003).
     """
-    Endpoint para solicitação de recomendações com base no andamento/histórico da consulta.
-    """
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+
+    patient_id = data.get('patient_id')
+    consultation_id = data.get('consultation_id')
+    if not patient_id or not consultation_id:
+        return _json_error("patient_id e consultation_id sao obrigatorios.", 400)
     try:
+        janela_min = recomendacoes.validar_janela(data.get('janela_min'))
+    except recomendacoes.JanelaInvalida as e:
+        return _json_error(str(e), 400)
 
-        data = request.get_json()
-
-        # Verifica se o JSON existe
-        if not data:
-            return jsonify({"error": "Requisição inválida. Corpo JSON esperado."}), 400
-
-        # Verifica se o patient_id e o consultation_id estão presentes no JSON
-        patient_id = data.get('patient_id')
-        consultation_id = data.get('consultation_id')
-
-        if not patient_id or not consultation_id:
-            return jsonify({"error": "paciente_id e consulta_id não encontrados."}), 400
-
-        # Define o caminho para o arquivo do prompt de recomendações
-        _patient_data, access_error = require_patient_access(patient_id)
-        if access_error:
-            return access_error
-        if not _consultas().pertence_ao_paciente(patient_id, consultation_id):
-            return _json_error("Consulta nao encontrada para este paciente.", 404)
-
-        prompt_file_path = os.path.join(os.path.dirname(__file__), 'recommendations.txt')
-
-        # Verifica se o arquivo existe
-        if not os.path.exists(prompt_file_path):
-            raise FileNotFoundError(f"Arquivo de prompt não encontrado em: {prompt_file_path}")
-
-        # Lê o conteúdo do arquivo
-        with open(prompt_file_path, 'r', encoding='utf-8') as f:
-            prompt_recomendacao_medica = f.read()
-
-        if not prompt_recomendacao_medica:
-            raise ValueError(f"O arquivo de prompt {prompt_file_path} está vazio.")
-
-        print(f"[RECOMENDAÇÃO] Iniciando busca para consulta_id: {consultation_id}")
+    _patient_data, access_error = require_patient_access(patient_id)
+    if access_error:
+        return access_error
+    if not _consultas().pertence_ao_paciente(patient_id, consultation_id):
+        return _json_error("Consulta nao encontrada para este paciente.", 404)
 
         # Chama a API Gemini. Ela carrega o histórico (incluindo transcrições) e
         # recebe o prompt de recomendação.
@@ -1453,13 +1609,46 @@ def handle_recommendations():
             consultation_id,
             prompt_recomendacao_medica
         )
+    desde = datetime.now(timezone.utc) - timedelta(minutes=janela_min)
+    transcricoes = _transcricoes().listar_da_consulta_desde(consultation_id, desde)
+    trecho = recomendacoes.montar_trecho(transcricoes)
 
-        # Retornar a recomendação para o frontend
-        return jsonify({"status": "success", "recommendation": resposta_ia}), 200
+    resposta = {
+        "status": "success",
+        "janela_min": janela_min,
+        "transcricoes_usadas": len(transcricoes),
+        "prompt": {"id": recomendacoes.PROMPT_ID, "versao": recomendacoes.PROMPT_VERSAO},
+    }
+    if not trecho:
+        # Sem transcricao na janela nao ha o que analisar: nem chama o modelo.
+        return jsonify({
+            **resposta,
+            "itens": [],
+            "recommendation": "",
+            "message": f"Nenhuma transcrição nos últimos {janela_min} min. "
+                       "Uma gravação em andamento só entra depois de parar.",
+        }), 200
 
+    texto_anonimo, mapa = _anonimizar_para_envio(trecho, patient_id, consultation_id)
+    try:
+        bruta = gemini_connection.gerar_resposta_unica(recomendacoes.INSTRUCAO, texto_anonimo)
     except Exception as e:
-        print(f"Erro catastrófico no endpoint /get_recommendation: {e}")
-        return jsonify({"error": f"Erro interno do servidor: {str(e)}"}), 500
+        # So metadados no log: nunca o conteudo da consulta.
+        print(f"[RECOMENDAÇÃO] Falha no modelo para a consulta {consultation_id}: {type(e).__name__}")
+        return _json_error("Não foi possível gerar sugestões agora. Tente de novo.", 502)
+
+    itens = [
+        {**item, "texto": mapa.reidratar(item["texto"])}
+        for item in recomendacoes.interpretar_resposta(bruta)
+    ]
+    print(f"[RECOMENDAÇÃO] Consulta {consultation_id}: {len(itens)} sugestão(ões) "
+          f"sobre {len(transcricoes)} transcrição(ões) de {janela_min} min.")
+    return jsonify({
+        **resposta,
+        "itens": itens,
+        # Texto corrido mantido para quem ainda le o formato antigo da rota.
+        "recommendation": "\n".join(f"- {item['texto']}" for item in itens),
+    }), 200
 
 
 
@@ -1467,5 +1656,9 @@ if __name__ == '__main__':
     # Cria/atualiza as tabelas antes de subir (alembic upgrade head), no
     # Docker e fora dele. O antigo seed do "Joao Silva" (D-09/D-24) saiu.
     sessao.aplicar_migracoes()
+    # Com debug=True o reloader roda o server em um processo filho
+    # (WERKZEUG_RUN_MAIN): o job sobe so nele, para nao duplicar.
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        limpeza_audio.iniciar_limpeza_periodica()
     print("Servidor Flask com Gemini e banco relacional iniciado.")
     app.run(host='0.0.0.0', port=3001, debug=True)

@@ -24,6 +24,8 @@ TABELAS = {
     "mapa_anonimizacao",
     # B36: auditoria de envios externos, so metadados (US016-CA004).
     "envio_externo",
+    # B30: partes (chunks) de audio aguardando transcricao (US017-CA003).
+    "parte_audio",
 }
 
 

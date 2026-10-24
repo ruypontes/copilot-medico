@@ -2,7 +2,6 @@ import re
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 from typing import Any
 
 import jwt as pyjwt
@@ -176,11 +175,10 @@ def reset_login_lockout(email: str) -> None:
     with _rate_limit_lock:
         _lockouts_by_email.pop(normalized_email, None)
 
-@lru_cache(maxsize=1)
 def get_auth_secret() -> str:
     if settings.auth_secret_key:
         return settings.auth_secret_key
-    raise AuthError("AUTH_SECRET_KEY nao configurado", 500)
+    raise AuthError("AUTH_SECRET_KEY nao configurado", 401)
 
 
 def normalize_email(email: Any) -> str:

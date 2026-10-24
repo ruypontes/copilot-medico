@@ -8,11 +8,12 @@
     "background": {
         "service_worker": "background.js"
     },
+    "minimum_chrome_version": "116",
     "permissions": [
         "scripting",
         "activeTab",
-        "storage"
-   
+        "storage",
+        "offscreen"
     ],
     "host_permissions": [ 
         "http://localhost:3001/*" 

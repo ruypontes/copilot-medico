@@ -58,7 +58,7 @@ Herança: os 7 arquivos de teste da Equipe 6 são consertados na Sprint 1 (alvos
 | Alucinação de exame | menção a exame não presente no caso (lista fechada por caso) | 0 |
 | Referências inventadas | regex de URL/DOI/"PubMed" na saída | 0 |
 | Latência | p50 / p95 por rota | SOAP p95 ≤ 20 s |
-| Custo | tokens × preço + minutos de áudio × preço | ≤ R$ 0,50 / consulta de 20 min |
+| Custo equivalente | tokens × preço de tabela + minutos de áudio × preço de tabela (gasto real = R$ 0, free tier) | informativo; referência ≤ R$ 0,50 / consulta de 20 min |
 
 ### 3.3 Execução
 
@@ -68,6 +68,12 @@ make eval PROVIDER=vosk
 ```
 
 Gera `eval/reports/YYYY-MM-DD-<provedor>-<prompt_versao>.md` com tabela por caso e agregados. O relatório da release entra em `docs/releases/v5.0.0-eval.md`. Comparar relatórios ao trocar prompt ou provedor é obrigatório antes de mesclar.
+
+### 3.4 Estado do `run_eval.py`
+
+- **v1 (B46):** JSON válido, completude, latência e custo equivalente, por caso e agregado, com relatório markdown (`eval/README.md`). Provedores `mock` (valida o harness, sem IA) e `gemini`.
+- **Completo (B57):** WER, acerto de papel, CID-10, alucinação de exame e referências inventadas.
+- Até as B39 e B40 existirem, a v1 usa um `SoapV1` e um prompt **provisórios** (`eval/soap_provisorio.py`, `eval/prompts/`); o oficial é preferido assim que existir. A tabela de preços (`eval/precos.json`) precisa ser conferida antes de o custo servir de base para qualquer decisão.
 
 ## 4. Piloto com médicos (Sprint 6)
 

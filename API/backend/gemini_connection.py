@@ -82,3 +82,22 @@ def send_message(patient_id: str, consultation_id: str, message_text: str) -> st
     except Exception as e:
         print(f"Erro ao enviar mensagem para a API Gemini para paciente {patient_id}, consulta {consultation_id}: {e}")
         return f"Desculpe, ocorreu um erro ao tentar me comunicar com a inteligência artificial: {str(e)}"
+
+def gerar_resposta_unica(instrucao: str, conteudo: str, response_schema: dict | None = None) -> str:
+    """Uma chamada avulsa ao Gemini, SEM o historico do chat da consulta.
+
+    Usada pelas recomendacoes (B38) e pela geracao do SOAP (B40). Pede JSON ao
+    modelo; com `response_schema` (ADR-05) o Gemini segue a estrutura pedida.
+    Diferente de send_message, levanta a excecao em caso de falha: quem chama
+    decide a resposta HTTP.
+    """
+    generation_config = {"response_mime_type": "application/json"}
+    if response_schema is not None:
+        generation_config["response_schema"] = response_schema
+    model = genai.GenerativeModel(
+        model_name=MODEL_NAME,
+        system_instruction=instrucao,
+        safety_settings=SAFETY_SETTINGS,
+        generation_config=generation_config,
+    )
+    return model.generate_content(conteudo).text

@@ -34,8 +34,9 @@ src/
   shared/         ui, hooks, formatSoapForPep.ts
 public/
   manifest.json   host_permissions restritos aos PEPs; content.js só nesses domínios
+  offscreen.html  documento offscreen: grava e envia o áudio em partes com o popup fechado
   content.js      registra adaptadores, botão flutuante, ponte de mensagens
-  background.js   fila offline, alarmes, sincronização
+  background.js   fila offline, alarmes, sincronização; cria o offscreen e guarda o estado da gravação
 ```
 
 Regras: nenhum componente acima de 300 linhas; `App.tsx` só compõe; lógica de PEP não conhece React; lógica de API não conhece DOM.
@@ -56,7 +57,7 @@ API/
     anonymizer/         regex.py, ner.py, pseudonym_map.py, anonymize()
     llm/                provider.py (interface), gemini.py, prompts/ (PT-BR, versionados)
     transcription/      provider.py, gemini_audio.py, whisper.py, vosk_local.py, diarize.py
-    soap/               schema.py (SoapV1), generator.py, cid10.py (tabela embarcada)
+    soap/               schema.py (SoapV1), diff.py (IA×médico, B44), gerador.py + prompts/soap_v1.txt + material.py (B40), cid10.py (tabela embarcada)
     pdf.py, export.py
   models/               SQLAlchemy + Alembic (migrations/)
   scripts/              download_models.py, migrate_json_db.py, seed_dev.py
@@ -76,6 +77,7 @@ erDiagram
     PACIENTE ||--o{ CONSULTA : tem
     CONSULTA ||--o{ MENSAGEM : contem
     CONSULTA ||--o{ TRANSCRICAO : gera
+    CONSULTA ||--o{ PARTE_AUDIO : aguarda
     CONSULTA ||--o{ DOCUMENTO_SOAP : produz
     CONSULTA ||--o{ ENVIO_EXTERNO : audita
     CONSULTA ||--o| CONSENTIMENTO : registra
@@ -130,6 +132,13 @@ erDiagram
         string operacao "chat | extensao | pdf | recomendacao | transcricao"
         int tamanho_bytes "SEM conteudo: so metadados"
         int chamadas
+    PARTE_AUDIO {
+        uuid id
+        uuid consulta_id
+        string gravacao_id "gerado pela extensão a cada gravação"
+        int seq "único por consulta + gravação"
+        text caminho "arquivo temporário; apagado na transcrição"
+        float duracao_s
         datetime criado_em
     }
     DOCUMENTO_SOAP {
@@ -139,6 +148,10 @@ erDiagram
         json versao_medico
         string status "gerado | editado | aprovado | inserido_no_pep"
         datetime aprovado_em
+        string schema_versao "SoapV1"
+        string prompt_id
+        string prompt_versao
+        datetime atualizado_em
     }
     CONSENTIMENTO {
         uuid consulta_id
@@ -160,11 +173,12 @@ erDiagram
 | POST | `/api/consultations/<id>/pep-import` | {pep_origem, source_url?, created_at?, campos: {peso, …, anamnese, …}} | resumo do que foi registrado (nomes dos campos, nunca o conteúdo) |
 | POST | `/api/consultations/<id>/messages` | texto | resposta do LLM (reidratada) |
 | POST | `/api/consultations/<id>/pdf` | multipart pdf | resumo + resposta |
-| POST | `/api/consultations/<id>/audio/chunks` | multipart wav, seq | 202 |
-| POST | `/api/consultations/<id>/transcribe` | provedor? | transcrição com turnos |
-| POST | `/api/consultations/<id>/recommendations` | janela_min? | itens[] |
-| POST | `/api/consultations/<id>/soap` | — | `SoapV1` (versao_ia) |
-| PUT | `/api/consultations/<id>/soap/<sid>` | versao_medico, status | SOAP |
+| POST | `/api/consultations/<id>/audio/chunks` | multipart `audio_file` (wav ≤ 5 min), `recording_id`, `seq` | 202 `{seq, duration, replaced, received[]}`; reenviar a mesma `seq` substitui a parte |
+| POST | `/api/consultations/<id>/transcribe` | `recording_id`, `total_chunks?`, provedor? | transcrição com turnos + `chunks {received, missing, failed}`; apaga o áudio das partes |
+| POST | `/api/recommendations` (B38; mantida a rota existente, US020-CA001) | patient_id, consultation_id, janela_min? (1–120, padrão 5) | itens[] {tipo, texto} (≤ 5, ≤ 20 palavras), janela_min, transcricoes_usadas |
+| POST | `/api/consultations/<id>/soap` (B40) | — | 201 com o SOAP gerado (versao_ia, reidratado), `tentativas`; 400 sem material; 502 com `errors` se inválido após 1 retry; 429 se a cota da IA esgotar |
+| GET | `/api/consultations/<id>/soap` (B44) | — | SOAP mais recente: `versao_ia`, `versao_medico`, `atual` e `diff` por seção (null sem edição) |
+| PUT | `/api/consultations/<id>/soap/<sid>` | versao_medico (SoapV1; B44), status (aprovação, B43) | SOAP com `diff`; 400 com `errors` por campo; 409 se aprovado |
 | GET | `/api/consultations/<id>/export?format=` | pdf \| md | arquivo |
 | GET | `/api/health` | — | versão, provedores ativos (**sem chaves**) |
 
@@ -253,6 +267,12 @@ Formato curto. Cada ADR ganha um arquivo em `docs/adr/` no repositório quando a
 ### ADR‑09 — Repositório único em organização GitHub
 **Contexto:** D‑21.
 **Decisão:** criar organização `copilot-medico` (ou similar) com repositório `copilot-medico`; importar o histórico da branch `develop` da Equipe 6 (que já contém o da Equipe 4). Owners: Dr. Rui + professor; alunos como maintainers do semestre.
+
+### ADR‑10 — Escopo do sistema gerenciador web (`front/copmed-web`)
+**Contexto:** o Grupo 2 (2026.1) entregou um web app React com login, pacientes, aprovação de médicos e cinco telas placeholder (D‑31). Decisão P10 pendente desde 09/10.
+**Decisão (PO, 15/10/2026):** a web **mantém apenas login, cadastro/listagem de pacientes e aprovação de médicos pelo admin**, integrados à mesma autenticação da API. As telas Agenda, Consulta, Atendimentos, Histórico e Ajustes e os cards fixos do Dashboard são removidos. Nenhum item novo de web entra no backlog até M4 além de manutenção.
+**Alternativas rejeitadas:** evoluir Consulta/Histórico na web (duplica o esforço com a extensão); congelar (perde o painel do admin, necessário para aprovar médicos).
+**Consequência:** a extensão continua o produto principal; a web é o painel administrativo e a visão do prontuário. Ver `docs/12`, P10.
 
 ## 7. Prompts (diretrizes)
 

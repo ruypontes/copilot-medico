@@ -1,0 +1,28 @@
+{
+  "id": "caso-05",
+  "queixa_principal": "Coriza e congestão nasal",
+  "transcricao": "Médico: Bom dia! O que está acontecendo?\nPaciente: Bom dia, doutor. Estou com o nariz escorrendo e entupido há uns quatro dias, e espirrando muito.\nMédico: Teve febre?\nPaciente: No começo achei que estava febril, mas medi e estava 37,2, bem baixa.\nMédico: Dor de garganta, tosse, dor no corpo, dor de cabeça?\nPaciente: Dor de garganta leve, tosse quase nada, o corpo está um pouco dolorido.\nMédico: Falta de ar, chiado no peito?\nPaciente: Não.\nMédico: Dor nos seios da face, pressão no rosto, secreção amarelada ou esverdeada?\nPaciente: Não, a secreção é clara, aguada.\nMédico: Tem alguma doença, toma remédio contínuo, tem alergia a algum medicamento?\nPaciente: Tenho rinite alérgica, mas não tomo remédio contínuo. Alergia a medicamento não tenho.\nMédico: Vou examinar o senhor. [exame físico] Temperatura 36,8, coração 80, pressão 120 por 80, saturação 98. Nariz com secreção clara, mucosa nasal inchada e vermelha. Garganta levemente vermelha, sem placas. Pulmão limpo, sem chiado. Seios da face sem dor à palpação.\nMédico: Seu Pedro, o quadro é de um resfriado comum, que é uma infecção viral das vias aéreas superiores. Não vejo sinais de sinusite bacteriana nem de complicação. Vou orientar hidratação, repouso, lavagem nasal com soro fisiológico, e dipirona se tiver dor ou febre. Se não melhorar em dez dias, ou se piorar com febre alta, dor forte no rosto, secreção amarelada ou esverdeada por mais de dez dias, volta aqui, tá bom?\nPaciente: Certo, doutor.\nMédico: Como o senhor tem rinite, vale a pena conversar sobre controle da rinite no futuro, mas agora não é o foco.\nMédico: Vou confirmar seus dados. Nome completo?\nPaciente: Pedro Henrique Alves Martins.\nMédico: Data de nascimento?\nPaciente: 12/09/1979.\nMédico: CPF?\nPaciente: 111.222.333-96.\nMédico: Telefone?\nPaciente: 81 97777-6666.\nMédico: E-mail?\nPaciente: pedro.martins@yahoo.com.br.\nMédico: Endereço?\nPaciente: Rua do Futuro, 200, Graças, Recife-PE, CEP 52050-000.",
+  "gabarito_soap": {
+    "subjetivo": "Paciente do sexo masculino, 47 anos, com história de rinite alérgica, refere coriza clara e congestão nasal há 4 dias, associadas a espirros frequentes, odinofagia leve e mialgia discreta. Nega febre (temperatura máxima aferida em casa 37,2°C), tosse significativa, dispneia, sibilância, dor facial ou secreção purulenta. Nega comorbidades além da rinite alérgica. Nega uso de medicação contínua. Nega alergias medicamentosas.",
+    "objetivo": "Ao exame: T axilar 36,8°C, FC 80 bpm, PA 120/80 mmHg, FR 16 irpm, SatO2 98% em ar ambiente. Bom estado geral, corado, hidratado, orientado. Mucosa nasal hiperemiada e edemaciada, com secreção clara. Orofaringe com hiperemia leve, sem exsudato. Ausculta pulmonar limpa, sem ruídos adventícios. Seios da face sem dor à palpação. Ausculta cardíaca normal. Abdome sem alterações.",
+    "avaliacao": "Nasofaringite aguda (resfriado comum) — CID-10 J00. Quadro viral típico, autolimitado, sem sinais de complicação bacteriana (sem febre alta persistente, sem secreção purulenta, sem dor facial, sem sinais de sinusite ou otite). Diagnósticos diferenciais considerados: rinossinusite bacteriana (não preenche critérios — secreção clara, sem dor facial, menos de 10 dias), faringite estreptocócica (sem exsudato, sem adenopatia, tosse presente), influenza (quadro mais leve, sem febre alta, sem mialgia intensa), COVID-19 (não testado; quadro compatível com síndrome gripal leve, mas sem indicação de teste no momento).",
+    "plano": "1. Sintomáticos: dipirona 1 g VO de 6/6h se dor ou febre (máx. 4 g/dia), lavagem nasal com soro fisiológico 0,9% várias vezes ao dia. 2. Hidratação oral abundante e repouso relativo. 3. Não prescritos antibióticos — quadro viral, sem indicação. 4. Retorno se não houver melhora em 10 dias, ou se surgirem sinais de alarme (febre alta persistente, dor facial intensa, secreção purulenta > 10 dias, dispneia, otalgia). 5. Considerar controle da rinite alérgica em consulta futura (anti-histamínico, corticoide nasal)."
+  },
+  "cid10_esperado": ["J00"],
+  "pendencias": [
+    "Teste para COVID-19 não realizado — quadro compatível com síndrome gripal leve, sem indicação no momento, mas deve ser considerado se houver piora ou se o paciente tiver contato com caso confirmado.",
+    "Avaliação formal da rinite alérgica não realizada nesta consulta — a ser abordada em consulta futura (controle de sintomas, anti-histamínico, corticoide nasal).",
+    "Antibiótico não prescrito (correto para quadro viral), mas a decisão não foi documentada explicitamente no prontuário como escolha clínica — deve ser registrada para evitar questionamentos.",
+    "Data exata de retorno não agendada — orientação condicional (retorno se não melhorar em 10 dias ou sinais de alarme).",
+    "Otoscopia não realizada — sem sintomas otológicos no momento, mas deve ser considerada se surgirem otalgia ou hipoacusia."
+  ],
+  "pii_plantada": {
+    "nome_completo": ["Pedro Henrique Alves Martins", "Seu Pedro"],
+    "cpf": ["111.222.333-96"],
+    "telefone": ["81 97777-6666"],
+    "email": ["pedro.martins@yahoo.com.br"],
+    "data_nascimento": ["12/09/1979"],
+    "endereco": ["Rua do Futuro, 200, Graças, Recife-PE, CEP 52050-000"],
+    "cep": ["52050-000"]
+  }
+}

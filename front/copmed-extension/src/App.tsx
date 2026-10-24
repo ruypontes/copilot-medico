@@ -12,6 +12,7 @@ import {
 import ExtensionLogin from "./features/auth/ExtensionLogin";
 import AuthenticatedApp from "./features/consultation/AuthenticatedApp";
 import AppHeader from "./features/shared/AppHeader";
+import { sendRecordingCommand } from "./features/recording/recordingClient";
 
 // Roteador de sessão: valida o token salvo e decide entre login e app autenticado.
 function App() {
@@ -78,6 +79,8 @@ function App() {
   }
 
   async function handleLogout() {
+    // Sair descarta a gravação em curso: sem sessão ela não teria como ser enviada.
+    await sendRecordingCommand({ type: "recording:cancel" });
     await clearSession();
     chrome.storage.local.remove(["patientId", "patientName", "consultationId", "consultationTitle"]);
     setSession(null);

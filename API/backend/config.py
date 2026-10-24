@@ -35,8 +35,25 @@ class Settings(BaseSettings):
     auth_login_lockout_attempts: int = 5
     auth_login_lockout_seconds: int = 900
 
-    # Use "*" em desenvolvimento; em producao prefira lista separada por virgulas.
-    cors_origins: str = "*"
+    # Origens locais explicitas; configure CORS_ORIGINS no ambiente de producao.
+    cors_origins: str = "http://localhost:8080,http://localhost:5174"
+
+    # Partes (chunks) de audio da gravacao (B30). Ficam em disco so ate a
+    # transcricao; vazio = pasta temporaria do sistema.
+    audio_chunks_dir: str = ""
+    audio_chunk_max_mb: int = 64
+    # Partes de gravacoes nunca finalizadas sao apagadas depois deste prazo.
+    audio_chunk_ttl_hours: int = 24
+    # Job que apaga o audio que sobrou (B35); 0 desliga.
+    audio_cleanup_interval_hours: float = 24
+
+    # Provedor de transcricao (ADR-04). Vazio ou "gemini" usa o Gemini audio
+    # com a mesma GEMINI_API_KEY (B31); "whisper" usa o Whisper via Groq e
+    # exige groq_api_key (B32); "vosk" mantem o Diarizador local.
+    transcription_provider: str = ""
+    gemini_audio_model: str = "gemini-2.5-flash"
+    groq_api_key: str = ""
+    groq_whisper_model: str = "whisper-large-v3"
 
     model_config = SettingsConfigDict(
         env_file=(str(API_ENV_PATH), str(BACKEND_ENV_PATH)),

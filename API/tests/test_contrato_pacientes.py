@@ -11,7 +11,12 @@ import pytest
 
 from backend import auth_decorators
 from ids import DOCTOR_A, DOCTOR_B
-from repositories import ConsultaRepository, PacienteRepository, sessao
+from repositories import (
+    ConsultaRepository,
+    PacienteRepository,
+    TranscricaoRepository,
+    sessao,
+)
 
 
 def _fake_login_as(monkeypatch, profile="medico", user_id=DOCTOR_A):
@@ -226,7 +231,175 @@ def test_transcription_log_other_doctor_403(client, outro_medico, paciente):
     assert client.get(f"/api/patients/{paciente[0]}/transcription-log", headers=outro_medico).status_code == 403
 
 
+# ---------- PATCH /api/patients/<id>/transcription-log/<id>/turns/<index> ----------
+
+def _criar_transcricao_com_turnos(paciente):
+    pid, cid = paciente
+
+    return TranscricaoRepository(sessao.obter_sessao()).adicionar(
+        pid,
+        cid,
+        texto="Bom dia. Estou com febre.",
+        duracao_s=10,
+        turnos=[
+            {
+                "speaker": "medico",
+                "role": "medico",
+                "text": "Bom dia.",
+                "start": 0,
+                "end": 2,
+            },
+            {
+                "speaker": "paciente",
+                "role": "paciente",
+                "text": "Estou com febre.",
+                "start": 2,
+                "end": 5,
+            },
+        ],
+    )
+
+
+def test_transcription_turn_role_success(client, medico, paciente):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+    pid = paciente[0]
+
+    resp = client.patch(
+        f"/api/patients/{pid}/transcription-log/{transcricao['id']}/turns/0",
+        headers=medico,
+        json={"role": "outro"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.get_json()["status"] == "success"
+
+    turnos = resp.get_json()["log"]["dialogue"]
+    assert turnos[0]["speaker"] == "outro"
+    assert turnos[0]["role"] == "outro"
+
+    # O segundo turno não deve ser alterado.
+    assert turnos[1]["speaker"] == "paciente"
+    assert turnos[1]["role"] == "paciente"
+
+
+def test_transcription_turn_role_invalid_role_400(
+    client, medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+    pid = paciente[0]
+
+    resp = client.patch(
+        f"/api/patients/{pid}/transcription-log/{transcricao['id']}/turns/0",
+        headers=medico,
+        json={"role": "administrador"},
+    )
+
+    assert resp.status_code == 400
+
+
+def test_transcription_turn_role_unknown_index_404(
+    client, medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+    pid = paciente[0]
+
+    resp = client.patch(
+        f"/api/patients/{pid}/transcription-log/{transcricao['id']}/turns/99",
+        headers=medico,
+        json={"role": "medico"},
+    )
+
+    assert resp.status_code == 404
+
+
+def test_transcription_turn_role_requires_token_401(client):
+    resp = client.patch(
+        "/api/patients/x/transcription-log/y/turns/0",
+        json={"role": "medico"},
+    )
+
+    assert resp.status_code == 401
+
+
+def test_transcription_turn_role_other_doctor_403(
+    client, outro_medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+    pid = paciente[0]
+
+    resp = client.patch(
+        f"/api/patients/{pid}/transcription-log/{transcricao['id']}/turns/0",
+        headers=outro_medico,
+        json={"role": "paciente"},
+    )
+
+    assert resp.status_code == 403
+
 # ---------- GET /api/patients/<id>/extension-data ----------
+
+
+# ---------- PATCH /api/patients/<id>/transcription-log/<id> ----------
+
+def test_transcription_roles_batch_success(client, medico, paciente):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+    pid = paciente[0]
+
+    resp = client.patch(
+        f"/api/patients/{pid}/transcription-log/{transcricao['id']}",
+        headers=medico,
+        json={"roles": ["Outro", "Paciente"]},
+    )
+
+    assert resp.status_code == 200
+
+    turnos = resp.get_json()["log"]["dialogue"]
+    assert turnos[0]["role"] == "Outro"
+    assert turnos[0]["role_key"] == "other"
+    assert turnos[1]["role"] == "Paciente"
+    assert turnos[1]["role_key"] == "patient"
+
+
+def test_transcription_roles_batch_invalid_role_400(
+    client, medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+
+    resp = client.patch(
+        f"/api/patients/{paciente[0]}/transcription-log/{transcricao['id']}",
+        headers=medico,
+        json={"roles": ["Inválido", "Paciente"]},
+    )
+
+    assert resp.status_code == 400
+
+
+def test_transcription_roles_batch_wrong_count_400(
+    client, medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+
+    resp = client.patch(
+        f"/api/patients/{paciente[0]}/transcription-log/{transcricao['id']}",
+        headers=medico,
+        json={"roles": ["Outro"]},
+    )
+
+    assert resp.status_code == 400
+
+
+def test_transcription_roles_batch_other_doctor_403(
+    client, outro_medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+
+    resp = client.patch(
+        f"/api/patients/{paciente[0]}/transcription-log/{transcricao['id']}",
+        headers=outro_medico,
+        json={"roles": ["Outro", "Paciente"]},
+    )
+
+    assert resp.status_code == 403
+
 
 def test_extension_data_get_success(client, medico, paciente):
     resp = client.get(f"/api/patients/{paciente[0]}/extension-data", headers=medico)
@@ -367,13 +540,22 @@ def test_upload_pdf_other_doctor_403(client, outro_medico, paciente):
 
 # ---------- POST /api/recommendations ----------
 
-def test_recommendations_success(client, medico, paciente):
+def test_recommendations_success(client, medico, paciente, monkeypatch):
+    # B38: as sugestoes saem das transcricoes da janela, nao do chat inteiro.
+    import server
+    from repositories import TranscricaoRepository
+
     pid, cid = paciente
+    TranscricaoRepository(sessao.obter_sessao()).adicionar(pid, cid, texto="Paciente com tosse", duracao_s=60)
+    monkeypatch.setattr(server.gemini_connection, "gerar_resposta_unica",
+                        lambda _i, _c: '{"itens": [{"tipo": "exame", "texto": "Auscultar pulmões"}]}')
     resp = client.post("/api/recommendations", json={
         "patient_id": pid, "consultation_id": cid,
     }, headers=medico)
     assert resp.status_code == 200
-    assert resp.get_json()["recommendation"]
+    body = resp.get_json()
+    assert body["itens"] == [{"tipo": "exame", "texto": "Auscultar pulmões"}]
+    assert body["recommendation"]
 
 
 def test_recommendations_validation_400(client, medico):
@@ -422,6 +604,103 @@ def test_transcribe_audio_success(client, medico, paciente, monkeypatch):
     body = resp.get_json()
     assert body["is_error"] is False
     assert body["transcription"]
+
+
+class _FakeGemini:
+    nome = "gemini"
+
+    def __init__(self, resultado=None, erro=None):
+        self.resultado = resultado
+        self.erro = erro
+
+    def processar_audio(self, caminho):
+        if self.erro:
+            raise self.erro
+        return self.resultado
+
+
+_TURNOS_GEMINI = [
+    {"role": "Médico", "role_key": "doctor", "text": "Bom dia", "speaker_id": 0, "start": 0.0, "end": 2.0},
+    {"role": "Paciente", "role_key": "patient", "text": "Estou com febre", "speaker_id": 1,
+     "start": 2.0, "end": 65.0},
+]
+
+
+def test_transcribe_audio_usa_o_provedor_padrao(client, medico, paciente, monkeypatch):
+    """B31: com o provedor configurado, a rota grava os turnos marcados por ele."""
+    server = importlib.import_module("server")
+    monkeypatch.setattr(server, "audio_processor", _FakeAudioProcessor())
+    monkeypatch.setattr(server, "transcription_provider", _FakeGemini({
+        "full_text": "Médico: Bom dia\nPaciente: Estou com febre",
+        "dialogue": _TURNOS_GEMINI, "speakers_count": 2, "duration": 65.0,
+    }))
+    pid, cid = paciente
+    resp = client.post("/api/transcribe_audio", data={
+        "audio_file": _audio(), "patient_id": pid, "consultation_id": cid,
+    }, content_type="multipart/form-data", headers=medico)
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["is_error"] is False
+    assert body["transcription"] == "Médico: Bom dia\nPaciente: Estou com febre"
+    assert [t["role_key"] for t in body["log_entry"]["dialogue"]] == ["doctor", "patient"]
+    assert body["log_entry"]["duration"] == "1:05"
+
+
+def test_transcribe_audio_provedor_falha_cai_no_diarizador(client, medico, paciente, monkeypatch):
+    """B31: erro do Gemini (cota, rede) nao derruba a rota; o Diarizador assume."""
+    server = importlib.import_module("server")
+    monkeypatch.setattr(server, "audio_processor", _FakeAudioProcessor())
+    monkeypatch.setattr(server, "transcription_provider", _FakeGemini(erro=RuntimeError("429")))
+    pid, cid = paciente
+    resp = client.post("/api/transcribe_audio", data={
+        "audio_file": _audio(), "patient_id": pid, "consultation_id": cid,
+    }, content_type="multipart/form-data", headers=medico)
+    assert resp.status_code == 200
+    assert resp.get_json()["transcription"] == "Paciente relata dor de cabeca"
+
+
+def test_transcribe_audio_sem_fala_nao_grava(client, medico, paciente, monkeypatch):
+    server = importlib.import_module("server")
+    monkeypatch.setattr(server, "transcription_provider", _FakeGemini({
+        "full_text": "", "dialogue": [], "speakers_count": 0, "duration": 0.0,
+    }))
+    pid, cid = paciente
+    resp = client.post("/api/transcribe_audio", data={
+        "audio_file": _audio(), "patient_id": pid, "consultation_id": cid,
+    }, content_type="multipart/form-data", headers=medico)
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["is_error"] is True
+    assert "log_entry" not in body
+
+
+def test_transcribe_audio_usa_provedor_do_env(client, medico, paciente, monkeypatch):
+    """B32: com TRANSCRIPTION_PROVIDER definido, a rota usa o provedor no lugar do Diarizador."""
+    server = importlib.import_module("server")
+
+    class _FakeWhisper:
+        nome = "whisper"
+
+        def processar_audio(self, caminho):
+            return {
+                "full_text": "Falante não identificado: Bom dia",
+                "dialogue": [{"role": "Falante não identificado", "role_key": "unknown",
+                              "text": "Bom dia", "speaker_id": None, "start": 0.0, "end": 65.0}],
+                "speakers_count": 1,
+                "duration": 65.0,
+            }
+
+    monkeypatch.setattr(server, "audio_processor", _FakeAudioProcessor())
+    monkeypatch.setattr(server, "transcription_provider", _FakeWhisper())
+    pid, cid = paciente
+    resp = client.post("/api/transcribe_audio", data={
+        "audio_file": _audio(), "patient_id": pid, "consultation_id": cid,
+    }, content_type="multipart/form-data", headers=medico)
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["transcription"] == "Falante não identificado: Bom dia"
+    assert body["log_entry"]["dialogue"][0]["role_key"] == "unknown"
+    assert body["log_entry"]["duration"] == "1:05"
 
 
 def test_transcribe_audio_without_file_400(client, medico):

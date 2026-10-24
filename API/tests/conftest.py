@@ -28,6 +28,12 @@ _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+# Sem isto o server sobe com o Gemini audio (padrao do B31) e, com um API/.env
+# local preenchido, as rotas de transcricao chamariam o Google de verdade; os
+# testes injetam o provedor. Fica fora das fixtures porque `backend.config`
+# e importado ja na coleta (antes de qualquer monkeypatch).
+os.environ["TRANSCRIPTION_PROVIDER"] = "vosk"
+
 
 # ---------------------------------------------------------------------------
 # Stubs dos modulos pesados (audio / IA)
@@ -117,7 +123,13 @@ def _make_stub_gemini_connection() -> types.ModuleType:
     def send_message(patient_id: str, consultation_id: str, message_text: str) -> str:
         return f"[stubbed AI reply] {message_text}"
 
+    def gerar_resposta_unica(instrucao: str, conteudo: str, response_schema=None) -> str:
+        # Recomendacoes (B38) e SOAP (B40): resposta vazia por padrao; os
+        # testes que dependem do conteudo trocam isto.
+        return '{"itens": []}'
+
     mod.send_message = send_message
+    mod.gerar_resposta_unica = gerar_resposta_unica
     return mod
 
 
