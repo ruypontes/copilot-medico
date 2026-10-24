@@ -124,6 +124,86 @@ novo.
 
 ![Etapa 2: cadastrar instalador](anexos/esus-pec/02-cadastrar-instalador.png)
 
+### Imagem pronta (sem o instalador)
+
+Quem não tem o `.jar` pode usar a imagem já construída no Docker Hub. O volume
+é o mesmo do compose, para os cadastros sobreviverem ao container:
+
+```bash
+docker run -d --name esus -p 8081:8080 --memory 2560m --restart unless-stopped \
+  -v esus-pec-data:/opt/e-SUS/database/postgresql-9.6.13-1-linux-x64/data \
+  rafaelluna2410/esus-pec:5.5.28-slim
+```
+
+A instalação de treinamento apaga o que foi digitado depois de 10 dias.
+
+### Preparar um atendimento de teste (B50)
+
+O adaptador da extensão (`front/copmed-extension/src/pep/esusPec.ts`) atua na
+aba **SOAP** de um atendimento. Depois do assistente de instalação, você entra
+como **Instalador**, um perfil só de administração: não há "Atendimentos" no
+menu. Para abrir um atendimento, o PEC exige unidade, equipe e uma lotação de
+médico, e unidade e equipe só vêm da **importação do CNES**. O caminho completo,
+feito para o B50:
+
+1. **Habilitar o município.** Em **Configurações da instalação → Municípios e
+   responsáveis**, adicione o município (ex.: Paulista/PE) com você como
+   responsável. Ele precisa ficar com **Habilitado: Sim**; sem isso o município
+   não aparece na importação do CNES.
+2. **Gerar o XML do CNES sintético.** O XML real vem da área restrita do
+   e-Gestor APS (login gov.br de gestor). Para teste, gere um fictício com uma
+   UBS, uma equipe eSF e uma médica, no formato XSD 3.1 que o PEC valida:
+
+   ```bash
+   python esus-pec/gerar_cnes_teste.py cnes_teste.xml   # Paulista/PE; --ibge para outro município
+   ```
+
+   O código IBGE do XML tem que ser o do município habilitado no passo 1.
+3. **Importar o CNES.** No módulo **CNES → Importação de CNES**, escolha o
+   município e importe o arquivo. A linha deve ficar "Importado", com 1 equipe,
+   1 profissional e 1 lotação.
+4. **Criar a sua lotação de médico.** No módulo **Profissionais**, abra o seu
+   usuário e adicione uma lotação:
+   - Unidade: `UBS TESTE COPMED`; Equipe: `EQUIPE TESTE COPMED`
+   - CBO: `225142` (médico da estratégia de saúde da família). O PEC sugere
+     "Agente comunitário de saúde" por padrão: troque
+   - Perfil: `MÉDICO` (remova o ACE, se vier preenchido)
+   - O PEC exige **CNS do profissional** para salvar: use um fictício (15
+     dígitos começando com 7, com dígito verificador válido)
+5. **Sair do PEC e entrar de novo.** A lotação nova só vale a partir do próximo
+   login: saia, entre de novo e escolha o acesso **Médico – UBS Teste Copmed**.
+   Só então aparecem os módulos **Cidadão** e **Lista de atendimentos**.
+6. **Cadastrar o cidadão.** Em **Cidadão → Adicionar cidadão** (não é a ficha
+   "Cadastro individual" do CDS), preencha só o obrigatório com dados
+   fictícios. O PEC pode pedir CPF além do CNS: use números fictícios válidos.
+7. **Colocar na lista e atender.** Em **Lista de atendimentos → Adicionar
+   cidadão**, escolha o cidadão, o profissional (você) e o serviço "Demanda
+   espontânea". Na linha dele, use **Atender** e abra a aba **SOAP**.
+
+Pontos de atenção:
+- A instalação de treinamento apaga o que foi digitado depois de 10 dias: se
+  passar disso, refaça os passos 6 e 7 (ou todos, se a importação sumir).
+- A barra vermelha "ajustar a configuração de horário" é sobre a agenda da
+  unidade e não impede o atendimento.
+
+Seletores usados pelo adaptador, conferidos no PEC 5.5.28:
+
+| O quê | Onde |
+|---|---|
+| Cabeçalho do cidadão | `<header>` com o nome em `h2`, "Sexo …" e "N anos e M meses" no texto |
+| Campos do SOAP | `[data-testid]` `textFieldSubjetivo`, `observacoesObjetivo`, `TextFieldObservacaoAvaliacao`, `textFieldPlano` |
+| Editor | Draft.js: a escrita usa um evento `paste`, que o editor trata como colagem do médico |
+
+Evidência do teste no PEC local (B50): SOAP vazio antes, leitura do cabeçalho e
+escrita nos quatro campos (o painel azul foi injetado só para mostrar o retorno
+das funções no print), e o texto mantido depois de trocar de aba.
+
+![Testes automatizados do adaptador](anexos/esus-pec/b50/1_testes_automatizados.jpg)
+![Antes: SOAP vazio](anexos/esus-pec/b50/2_pec_antes_soap_vazio.jpg)
+![Depois: leitura do cabeçalho e Subjetivo/Objetivo escritos](anexos/esus-pec/b50/3_pec_depois_leitura_e_escrita_S_O.jpg)
+![Depois: Avaliação e Plano escritos](anexos/esus-pec/b50/4_pec_depois_escrita_A_P.jpg)
+![Texto mantido após trocar de aba](anexos/esus-pec/b50/5_pec_texto_mantido_apos_trocar_aba.jpg)
+
 ### Parar / remover
 
 Com o compose (na raiz do projeto):
