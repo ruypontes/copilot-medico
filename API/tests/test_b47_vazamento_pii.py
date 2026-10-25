@@ -100,6 +100,20 @@ LACUNAS_CONHECIDAS: dict[tuple[str, str], str] = {
         "data por extenso com dia por palavra",
     ("caso-17", "Primeiro de dezembro de 1988"):
         "data por extenso com dia por palavra",
+    # --- telefone por extenso (6 casos) ---
+    # O regex de TELEFONE exige dígitos; "Oitenta e um, ..." escapa.
+    ("caso-02", "Oitenta e um, nove nove oito sete sete, seis cinco quatro três"):
+        "telefone por extenso sem padrão em padroes.py",
+    ("caso-06", "Oitenta e um, nove seis seis seis cinco, quatro três dois um"):
+        "telefone por extenso sem padrão em padroes.py",
+    ("caso-09", "Oitenta e um, nove quatro quatro quatro três, dois um zero nove"):
+        "telefone por extenso sem padrão em padroes.py",
+    ("caso-13", "Oitenta e um, nove oito sete sete sete, seis cinco quatro três"):
+        "telefone por extenso sem padrão em padroes.py",
+    ("caso-14", "Oitenta e um, nove nove oito oito oito, um dois três quatro"):
+        "telefone por extenso sem padrão em padroes.py",
+    ("caso-17", "Oitenta e um, nove nove nove nove nove, um um um um"):
+        "telefone por extenso sem padrão em padroes.py",
     # --- endereço (logradouro+número) sem padrão de endereço (20 casos) ---
     # padroes.py cobre só CEP; o resto do endereço passa intacto.
     ("caso-01", "Rua das Flores, 123, Boa Vista, Recife-PE, CEP 50050-000"):
@@ -292,10 +306,20 @@ def _contem_valor(payload: str, valor: str, categoria: str) -> bool:
         return _normalizar_texto(chave) in payload_norm
 
     if categoria in CATEGORIAS_COM_DIGITOS:
-        padrao = _regex_digitos_tolerante(valor)
-        if padrao is None:
-            return False
-        return padrao.search(payload) is not None
+        digitos = re.sub(r"\D", "", valor)
+        if digitos:
+            padrao = _regex_digitos_tolerante(valor)
+            if padrao is None:
+                return False
+            return padrao.search(payload) is not None
+        # Valor por extenso (sem dígitos): fallback para comparação
+        # literal normalizada com word boundary. Sem isso, telefone
+        # por extenso ("Oitenta e um, ...") nunca seria detectado —
+        # falso negativo que esconderia vazamento real.
+        padrao_livre = re.compile(
+            r"(?<!\w)" + re.escape(valor_norm) + r"(?!\w)"
+        )
+        return padrao_livre.search(payload_norm) is not None
 
     # Texto livre: exigir fronteira de palavra, para não confundir
     # substring com ocorrência real (ex.: "Maria" dentro de "primária",
@@ -517,6 +541,36 @@ def test_canario_texto_anonimizado_passa(ner_desligado):
         f"Texto anonimizado é muito menor que o original "
         f"({len(texto_anon)} vs {len(texto)}). Anonimização apagou conteúdo."
     )
+
+
+@pytest.mark.leak
+def test_canario_telefone_por_extenso_acusa_vazamento():
+    """Prova que telefone por extenso (sem dígitos) é detectado no texto cru.
+
+    Regressão real (corrigida na B47): a regex de dígitos retornava None
+    para valores como "Oitenta e um, nove nove...", e o verificador
+    silenciosamente ignorava esses valores — o telefone por extenso
+    vazava nos casos 02, 06, 13, 14 e 17 sem que o teste A acusasse.
+    Com o fallback de comparação literal normalizada, este canário
+    garante que a regressão não volta.
+    """
+    caso = _carregar_caso(CASES_DIR / "caso-02.json")
+    telefones_por_extenso = [
+        t for t in caso["pii_plantada"].get("telefone", [])
+        if not re.search(r"\d", t)
+    ]
+    assert telefones_por_extenso, (
+        "caso-02 não tem telefone por extenso; o canário perdeu o sentido."
+    )
+
+    vazamentos = _detectar_vazamentos(
+        caso, caso["transcricao"], ignorar_lacunas=False,
+    )
+    for valor in telefones_por_extenso:
+        assert ("telefone", valor) in vazamentos, (
+            f"Telefone por extenso {valor!r} NÃO foi detectado no texto cru. "
+            f"Verificador tem falso negativo para valores sem dígitos."
+        )
 
 
 # ---------------------------------------------------------------------------
