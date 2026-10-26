@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import type { MotivoFalhaEscrita } from "../../pep/pepAdapter";
+import {
+  conferirPaciente,
+  MENSAGEM_NAO_CONFERIDO,
+  mensagemDivergencia,
+  mesmoPacienteNaTela,
+} from "../../pep/conferirPaciente";
+import type { MotivoFalhaEscrita, PatientInfo } from "../../pep/pepAdapter";
 import { formatSoapForPep } from "../../pep/formatarSoap";
 import { markSoapInserted } from "../../services/api";
 import { getErrorMessage, type SoapDocument } from "../shared/types";
@@ -10,6 +16,10 @@ import { ponteChrome, type PonteDoPep } from "./pepDaAba";
 // aberto na aba. Primeiro escreve pelo adaptador do PEP; só com a escrita
 // confirmada registra o status `inserido_no_pep` na API. Pronto para o
 // SoapEditor (B43) usar depois do "Aprovar".
+//
+// Antes de escrever, confere o paciente do cabeçalho do PEP com o paciente da
+// consulta (conferirPaciente.ts): se não bater, nada é escrito sem o médico
+// confirmar; se o PEP não mostrar o paciente, escreve e avisa.
 
 const NOMES_PEP: Record<string, string> = { "esus-pec": "e-SUS PEC", amplimed: "Amplimed" };
 
@@ -22,15 +32,28 @@ const FALHAS: Record<MotivoFalhaEscrita, string> = {
 
 type Props = {
   consultationId: string;
+  /** Nome do paciente da consulta, como o popup mostra (patientName). */
+  pacienteSelecionado: string | null;
   soap: SoapDocument;
   onInserted?: (soap: SoapDocument) => void;
   ponte?: PonteDoPep;
 };
 
-export default function InsertIntoPepButton({ consultationId, soap, onInserted, ponte = ponteChrome }: Props) {
+type Divergencia = { noPep: string; selecionado: string; doPep: PatientInfo | null };
+
+export default function InsertIntoPepButton({
+  consultationId,
+  pacienteSelecionado,
+  soap,
+  onInserted,
+  ponte = ponteChrome,
+}: Props) {
   const [pep, setPep] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [avisoConferencia, setAvisoConferencia] = useState<string | null>(null);
+  // Paciente do PEP diferente do da consulta: espera o médico decidir.
+  const [divergencia, setDivergencia] = useState<Divergencia | null>(null);
   // Texto já está no PEP, mas o status não foi gravado: só falta registrar.
   const [pendenteRegistro, setPendenteRegistro] = useState<string | null>(null);
 
@@ -67,20 +90,53 @@ export default function InsertIntoPepButton({ consultationId, soap, onInserted, 
     }
   }
 
+  async function escreverNoPep(semConferencia: string | null) {
+    const escrita = await ponte.escrever(formatSoapForPep(soap.atual, pep ?? undefined));
+    if (!escrita) {
+      setPep(null);
+      setAviso("A aba não mostra mais um prontuário. Nada foi inserido.");
+    } else if (!escrita.resultado.ok) {
+      setAviso(FALHAS[escrita.resultado.motivo]);
+    } else {
+      setAvisoConferencia(semConferencia);
+      await registrar(escrita.pep);
+    }
+  }
+
   async function inserir() {
     if (motivoDesabilitado || ocupado) return;
     setOcupado(true);
     setAviso(null);
+    setAvisoConferencia(null);
+    setDivergencia(null);
     try {
-      const escrita = await ponte.escrever(formatSoapForPep(soap.atual, pep ?? undefined));
-      if (!escrita) {
-        setPep(null);
-        setAviso("A aba não mostra mais um prontuário. Nada foi inserido.");
-      } else if (!escrita.resultado.ok) {
-        setAviso(FALHAS[escrita.resultado.motivo]);
-      } else {
-        await registrar(escrita.pep);
+      const doPep = await ponte.pacienteDaAba();
+      const conferencia = conferirPaciente(doPep, pacienteSelecionado ? { nome: pacienteSelecionado } : null);
+      if (conferencia.situacao === "divergente") {
+        setDivergencia({ noPep: conferencia.noPep, selecionado: conferencia.selecionado, doPep });
+        return;
       }
+      await escreverNoPep(
+        conferencia.situacao === "nao_conferido" ? MENSAGEM_NAO_CONFERIDO[conferencia.motivo] : null,
+      );
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function inserirMesmoAssim() {
+    if (!divergencia || ocupado) return;
+    setOcupado(true);
+    try {
+      // A confirmação vale só para o paciente que o médico viu no aviso: se a
+      // aba mudou de paciente enquanto ele decidia, não escreve.
+      const agora = await ponte.pacienteDaAba();
+      setDivergencia(null);
+      if (!mesmoPacienteNaTela(divergencia.doPep, agora)) {
+        setAviso("O prontuário da aba mudou de paciente. Nada foi inserido: confira e tente de novo.");
+        return;
+      }
+      await escreverNoPep(null);
     } finally {
       setOcupado(false);
     }
@@ -107,11 +163,22 @@ export default function InsertIntoPepButton({ consultationId, soap, onInserted, 
           type="button"
           className="btn-green"
           onClick={inserir}
-          disabled={Boolean(motivoDesabilitado) || ocupado}
+          disabled={Boolean(motivoDesabilitado) || ocupado || divergencia !== null}
           aria-describedby={motivoDesabilitado ? "soap-inserir-motivo" : undefined}
         >
           {ocupado ? "Inserindo..." : inserido ? "Inserido no prontuário" : "Inserir no prontuário"}
         </button>
+      )}
+      {divergencia && (
+        <div className="soap-diff-aviso" role="alertdialog" aria-label="Paciente diferente">
+          <p>{mensagemDivergencia(divergencia)} Nada foi inserido.</p>
+          <button type="button" onClick={() => setDivergencia(null)} disabled={ocupado} autoFocus>
+            Cancelar
+          </button>{" "}
+          <button type="button" className="btn-green" onClick={inserirMesmoAssim} disabled={ocupado}>
+            Inserir mesmo assim
+          </button>
+        </div>
       )}
       {motivoDesabilitado && !pendenteRegistro && !aviso && (
         <p id="soap-inserir-motivo" className="soap-diff-aviso">
@@ -121,6 +188,11 @@ export default function InsertIntoPepButton({ consultationId, soap, onInserted, 
       {aviso && (
         <p className="soap-diff-aviso" role="status">
           {aviso}
+        </p>
+      )}
+      {avisoConferencia && (
+        <p className="soap-diff-aviso" role="status">
+          {avisoConferencia}
         </p>
       )}
     </div>

@@ -98,6 +98,11 @@ async function importarDoPep(message, sender) {
   const token = session[TOKEN_KEY];
   if (!token) return { ok: false, mensagem: 'Entre na extensao primeiro' };
   if (!local.consultationId) return { ok: false, mensagem: 'Selecione paciente e consulta na extensao' };
+  // O content script conferiu o paciente do PEP com a consulta que leu no clique: se a
+  // selecao mudou desde entao, a conferencia nao vale para a consulta de agora.
+  if (message.consultation_id !== local.consultationId) {
+    return { ok: false, mensagem: 'A consulta selecionada mudou: confira e envie de novo' };
+  }
 
   const apiUrl = local[API_URL_KEY] || DEFAULT_API_URL;
   const response = await fetch(

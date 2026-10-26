@@ -11,12 +11,22 @@ import { ehComandoPep, tratarComandoPep } from "./comandosPep";
 // B52: botão flutuante só em página de PEP detectada.
 criarBotaoFlutuante({
   registry: pepRegistry,
-  enviar: (adaptador, campos) =>
+  // Seleção do popup (usePatients.ts). O nome só é comparado aqui, no navegador.
+  selecaoAtual: async () => {
+    const { consultationId, patientName } = await chrome.storage.local.get(["consultationId", "patientName"]);
+    return {
+      consultationId: typeof consultationId === "string" ? consultationId : null,
+      paciente: typeof patientName === "string" ? { nome: patientName } : null,
+    };
+  },
+  enviar: (adaptador, campos, selecao) =>
     chrome.runtime.sendMessage({
       type: "pep:import",
       pep_origem: adaptador.id,
       campos,
       source_url: location.href,
+      // O background recusa se a consulta mudou depois da conferência.
+      consultation_id: selecao.consultationId,
     }),
 }).iniciar();
 

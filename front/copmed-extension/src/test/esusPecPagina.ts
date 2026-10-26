@@ -72,15 +72,28 @@ export interface OpcoesPaginaPec {
   textos?: Partial<Record<"S" | "O" | "A" | "P", string>>;
   /** Sem o simulador, a colagem não é tratada: imita o Draft.js recusando o texto. */
   semDraft?: boolean;
+  /** Cidadão do cabeçalho; `null` tira o cabeçalho do cidadão (o SOAP continua na tela). */
+  paciente?: PacientePec | null;
 }
 
-export function htmlPaginaPec({ textos = { O: "PA 120/80 mmHg.\nAfebril." } }: OpcoesPaginaPec = {}): string {
+export type PacientePec = { nome: string; sexo: string; idade: string };
+
+export const PACIENTE_PEC: PacientePec = { nome: "Paciente Fictício Copmed", sexo: "Feminino", idade: "38 anos e 2 meses" };
+
+/** Sem espaço entre as tags, como no PEC: o texto sai colado ("Feminino38 anos"). */
+function cabecalhoCidadao({ nome, sexo, idade }: PacientePec): string {
+  return `<div><div><div><div><h2>${escapar(nome)}</h2></div><div><span>| Sexo ${sexo}</span></div></div></div><div><div><div><div><div><span>${idade}| Nasceu em <time>15/08/1988</time></span></div></div></div></div><div><p><span>CPF</span><span>—</span></p><p><span>CNS</span><span>—</span></p></div></div></div>`;
+}
+
+export function htmlPaginaPec({
+  textos = { O: "PA 120/80 mmHg.\nAfebril." },
+  paciente = PACIENTE_PEC,
+}: OpcoesPaginaPec = {}): string {
   return `<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8"><title>PEC</title></head>
 <body>
   <header>
-    <!-- Sem espaço entre as tags, como no PEC: o texto sai colado ("Feminino38 anos"). -->
-    <div><div><div><div><h2>Paciente Fictício Copmed</h2></div><div><span>| Sexo Feminino</span></div></div></div><div><div><div><div><div><span>38 anos e 2 meses| Nasceu em <time>15/08/1988</time></span></div></div></div></div><div><p><span>CPF</span><span>—</span></p><p><span>CNS</span><span>—</span></p></div></div></div>
+    ${paciente ? cabecalhoCidadao(paciente) : ""}
     <nav>
       <a href="/lista-atendimento/atendimento/1/folha-rosto">Folha de rosto</a>
       <a href="/lista-atendimento/atendimento/1/soap" aria-current="page">SOAP</a>

@@ -7,6 +7,7 @@
  * aqui vira "sem PEP".
  */
 
+import type { PatientInfo } from "../../pep/pepAdapter";
 import type {
   ComandoPep,
   RespostaEscritaPep,
@@ -16,6 +17,8 @@ import type {
 export type PonteDoPep = {
   /** Id do PEP aberto na aba ativa ("esus-pec", "amplimed") ou null. */
   pepDaAba(): Promise<string | null>;
+  /** Paciente do cabeçalho do PEP da aba, lido agora; null se não houver. */
+  pacienteDaAba(): Promise<PatientInfo | null>;
   /** Escreve no PEP da aba; null se a aba não tem mais um PEP. */
   escrever(texto: string): Promise<RespostaEscritaPep | null>;
 };
@@ -33,6 +36,9 @@ async function enviarParaAba<T>(comando: ComandoPep): Promise<T | null> {
 export const ponteChrome: PonteDoPep = {
   async pepDaAba() {
     return (await enviarParaAba<RespostaStatusPep>({ type: "pep:status" }))?.pep ?? null;
+  },
+  async pacienteDaAba() {
+    return (await enviarParaAba<RespostaStatusPep>({ type: "pep:status" }))?.paciente ?? null;
   },
   escrever(texto) {
     return enviarParaAba<RespostaEscritaPep>({ type: "pep:write", text: texto });
