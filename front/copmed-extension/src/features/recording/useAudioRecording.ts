@@ -41,6 +41,11 @@ function outcomeNotices(result: RecordingResult): string[] {
   if (result.stopReason === "device") {
     notices.push("🎙️ O microfone foi desconectado: a gravação foi encerrada nesse ponto.");
   }
+  if (result.usedFallback) {
+    notices.push(
+      "⚠️ A transcrição utilizou um provedor alternativo (fallback). Revise o texto com atenção, pois a precisão pode ser menor."
+    );
+  }
   if (result.missingChunks.length > 0) {
     notices.push(
       `⚠️ Parte(s) ${result.missingChunks.join(", ")} do áudio não foram enviadas ou transcritas: a transcrição pode estar incompleta.`
@@ -71,7 +76,11 @@ export function useAudioRecording({
   const [viewingLog, setViewingLog] = useState<TranscriptionLogItem | null>(null); // Armazena o log que está sendo lido
   const deliveredRef = useRef<string | null>(null);
 
-  const { transcriptionLog, addTranscription } = useTranscriptionLog(patientId);
+  const {
+  transcriptionLog,
+  addTranscription,
+  updateTranscription,
+} = useTranscriptionLog(patientId);
 
   const isRecording = snapshot.status === "recording";
   const isPaused = snapshot.status === "paused";
@@ -130,7 +139,14 @@ export function useAudioRecording({
     setHasRecordedAudio(true);
     if (result.logEntry) addTranscription(result.logEntry); // Atualiza lista visual de logs
     handleSendMessage(result.transcription); // Envia transcrição para o fluxo de chat
-  }, [result, consultationId, patientId, addTranscription, handleSendMessage]);
+   }, [
+    result,
+    consultationId,
+    patientId,
+    addTranscription,
+    updateTranscription,
+    handleSendMessage,
+  ]);
 
   // --- Função para iniciar gravação ---
   const startAudioRecording = useCallback(async () => {
@@ -178,6 +194,8 @@ export function useAudioRecording({
     isPaused,
     isProcessing,
     isActive,
+    patientId,
+  updateTranscription,
     canStart: Boolean(patientId && consultationId) && !isActive,
     // A gravação pertence à consulta em que começou, mesmo que outra esteja aberta agora.
     isOtherConsultation: isActive && snapshot.consultationId !== consultationId,

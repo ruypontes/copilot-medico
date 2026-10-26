@@ -187,6 +187,7 @@ async function finalize(recording: ActiveRecording): Promise<void> {
         intervalMs: FLUSH_INTERVAL_MS,
       });
       const texto = String(data.transcription ?? "").trim();
+      result.usedFallback = data.used_fallback === true;
       result.missingChunks = [...(data.chunks?.missing ?? []), ...(data.chunks?.failed ?? [])].sort(
         (a, b) => a - b
       );

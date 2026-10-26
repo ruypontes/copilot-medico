@@ -63,6 +63,12 @@ jobs:
         # indefinidos e imports nao usados.
         run: ruff check .
 
+      - name: "4b. Teste de vazamento de PII (bloqueante, B47)"
+        # Bloqueante: se qualquer PII plantada nos 20 casos sinteticos
+        # aparecer no payload que SERIA enviado ao Gemini, o CI falha
+        # antes da suite completa. Ver US016-CA003 e B47.
+        run: pytest tests/test_b47_vazamento_pii.py -v -m leak
+
       - name: "5. Rodar a suíte de testes com cobertura"
         run: pytest tests/ -v --cov=backend --cov=server --cov=models --cov=repositories --cov-report=term-missing --cov-report=xml --cov-report=html
 

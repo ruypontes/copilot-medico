@@ -51,6 +51,7 @@ export type RecordingResult = {
   error: string | null;
   /** Partes que não chegaram ao servidor ou não puderam ser transcritas. */
   missingChunks: number[];
+  usedFallback?: boolean;
 };
 
 export type RecordingSnapshot = {

@@ -237,7 +237,7 @@ describe("chat e transcrições", () => {
     await screen.findByText("Bom dia, o que houve?");
     screen.getByText("Estou com dor de cabeça.");
     screen.getByText(/^Transcrição de /);
-    fireEvent.click(screen.getByRole("button", { name: "❌ Fechar Arquivo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fechar arquivo" }));
     await waitFor(() => expect(screen.queryByText("Bom dia, o que houve?")).toBeNull());
   });
 

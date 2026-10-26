@@ -18,6 +18,7 @@ export type RecordingRef = {
 export type TranscribeResponse = {
   transcription?: string;
   is_error?: boolean;
+  used_fallback?: boolean;
   log_entry?: TranscriptionLogItem;
   chunks?: { received?: number[]; missing?: number[]; failed?: number[] };
 };

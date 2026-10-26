@@ -11,7 +11,12 @@ import pytest
 
 from backend import auth_decorators
 from ids import DOCTOR_A, DOCTOR_B
-from repositories import ConsultaRepository, PacienteRepository, sessao
+from repositories import (
+    ConsultaRepository,
+    PacienteRepository,
+    TranscricaoRepository,
+    sessao,
+)
 
 
 def _fake_login_as(monkeypatch, profile="medico", user_id=DOCTOR_A):
@@ -226,7 +231,175 @@ def test_transcription_log_other_doctor_403(client, outro_medico, paciente):
     assert client.get(f"/api/patients/{paciente[0]}/transcription-log", headers=outro_medico).status_code == 403
 
 
+# ---------- PATCH /api/patients/<id>/transcription-log/<id>/turns/<index> ----------
+
+def _criar_transcricao_com_turnos(paciente):
+    pid, cid = paciente
+
+    return TranscricaoRepository(sessao.obter_sessao()).adicionar(
+        pid,
+        cid,
+        texto="Bom dia. Estou com febre.",
+        duracao_s=10,
+        turnos=[
+            {
+                "speaker": "medico",
+                "role": "medico",
+                "text": "Bom dia.",
+                "start": 0,
+                "end": 2,
+            },
+            {
+                "speaker": "paciente",
+                "role": "paciente",
+                "text": "Estou com febre.",
+                "start": 2,
+                "end": 5,
+            },
+        ],
+    )
+
+
+def test_transcription_turn_role_success(client, medico, paciente):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+    pid = paciente[0]
+
+    resp = client.patch(
+        f"/api/patients/{pid}/transcription-log/{transcricao['id']}/turns/0",
+        headers=medico,
+        json={"role": "outro"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.get_json()["status"] == "success"
+
+    turnos = resp.get_json()["log"]["dialogue"]
+    assert turnos[0]["speaker"] == "outro"
+    assert turnos[0]["role"] == "outro"
+
+    # O segundo turno não deve ser alterado.
+    assert turnos[1]["speaker"] == "paciente"
+    assert turnos[1]["role"] == "paciente"
+
+
+def test_transcription_turn_role_invalid_role_400(
+    client, medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+    pid = paciente[0]
+
+    resp = client.patch(
+        f"/api/patients/{pid}/transcription-log/{transcricao['id']}/turns/0",
+        headers=medico,
+        json={"role": "administrador"},
+    )
+
+    assert resp.status_code == 400
+
+
+def test_transcription_turn_role_unknown_index_404(
+    client, medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+    pid = paciente[0]
+
+    resp = client.patch(
+        f"/api/patients/{pid}/transcription-log/{transcricao['id']}/turns/99",
+        headers=medico,
+        json={"role": "medico"},
+    )
+
+    assert resp.status_code == 404
+
+
+def test_transcription_turn_role_requires_token_401(client):
+    resp = client.patch(
+        "/api/patients/x/transcription-log/y/turns/0",
+        json={"role": "medico"},
+    )
+
+    assert resp.status_code == 401
+
+
+def test_transcription_turn_role_other_doctor_403(
+    client, outro_medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+    pid = paciente[0]
+
+    resp = client.patch(
+        f"/api/patients/{pid}/transcription-log/{transcricao['id']}/turns/0",
+        headers=outro_medico,
+        json={"role": "paciente"},
+    )
+
+    assert resp.status_code == 403
+
 # ---------- GET /api/patients/<id>/extension-data ----------
+
+
+# ---------- PATCH /api/patients/<id>/transcription-log/<id> ----------
+
+def test_transcription_roles_batch_success(client, medico, paciente):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+    pid = paciente[0]
+
+    resp = client.patch(
+        f"/api/patients/{pid}/transcription-log/{transcricao['id']}",
+        headers=medico,
+        json={"roles": ["Outro", "Paciente"]},
+    )
+
+    assert resp.status_code == 200
+
+    turnos = resp.get_json()["log"]["dialogue"]
+    assert turnos[0]["role"] == "Outro"
+    assert turnos[0]["role_key"] == "other"
+    assert turnos[1]["role"] == "Paciente"
+    assert turnos[1]["role_key"] == "patient"
+
+
+def test_transcription_roles_batch_invalid_role_400(
+    client, medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+
+    resp = client.patch(
+        f"/api/patients/{paciente[0]}/transcription-log/{transcricao['id']}",
+        headers=medico,
+        json={"roles": ["Inválido", "Paciente"]},
+    )
+
+    assert resp.status_code == 400
+
+
+def test_transcription_roles_batch_wrong_count_400(
+    client, medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+
+    resp = client.patch(
+        f"/api/patients/{paciente[0]}/transcription-log/{transcricao['id']}",
+        headers=medico,
+        json={"roles": ["Outro"]},
+    )
+
+    assert resp.status_code == 400
+
+
+def test_transcription_roles_batch_other_doctor_403(
+    client, outro_medico, paciente
+):
+    transcricao = _criar_transcricao_com_turnos(paciente)
+
+    resp = client.patch(
+        f"/api/patients/{paciente[0]}/transcription-log/{transcricao['id']}",
+        headers=outro_medico,
+        json={"roles": ["Outro", "Paciente"]},
+    )
+
+    assert resp.status_code == 403
+
 
 def test_extension_data_get_success(client, medico, paciente):
     resp = client.get(f"/api/patients/{paciente[0]}/extension-data", headers=medico)
