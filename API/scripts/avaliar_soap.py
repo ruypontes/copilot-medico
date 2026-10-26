@@ -84,7 +84,8 @@ def avaliar_caso(caso: dict, chamar_modelo) -> dict:
 
 
 def _cota_esgotada(erro: Exception) -> bool:
-    return type(erro).__name__ in {"ResourceExhausted", "TooManyRequests"}
+    # O backend.llm marca a cota esgotada (429) no LlmError (B41)
+    return getattr(erro, "cota_esgotada", False)
 
 
 def resumo(resultados: list[dict]) -> str:

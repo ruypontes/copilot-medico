@@ -5,6 +5,7 @@ import re
 import pytest
 from sqlalchemy import text
 
+from backend.llm import LlmError
 from backend.soap import gerador, response_schema, validar_soap
 from backend.soap.material import montar_material
 from ids import DOCTOR_B, TEST_USER_ID
@@ -302,10 +303,7 @@ def test_cota_esgotada_vira_429(client, auth_headers, consulta, modelo):
     pid, cid = consulta
     _transcrever(pid, cid, "Paciente com tosse.")
 
-    class ResourceExhausted(Exception):
-        pass
-
-    modelo.respostas.append(ResourceExhausted("quota"))
+    modelo.respostas.append(LlmError("429 RESOURCE_EXHAUSTED", cota_esgotada=True))
     r = client.post(f"/api/consultations/{cid}/soap", headers=auth_headers("medico"))
 
     assert r.status_code == 429 and "Limite de uso" in r.get_json()["message"]

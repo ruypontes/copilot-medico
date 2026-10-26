@@ -176,6 +176,32 @@ def test_erro_do_sdk_vira_llm_error_sem_a_chave_e_descarta_a_sessao():
     assert len(sdk.sessoes) == 2
 
 
+class _ErroApiFalso(Exception):
+    """Como google.genai.errors.APIError: codigo HTTP e status da API."""
+
+    def __init__(self, code, status):
+        super().__init__(f"{code} {status}")
+        self.code, self.status = code, status
+
+
+@pytest.mark.parametrize("erro, cota", [
+    (_ErroApiFalso(429, "RESOURCE_EXHAUSTED"), True),
+    (_ErroApiFalso(None, "RESOURCE_EXHAUSTED"), True),
+    (type("ResourceExhausted", (Exception,), {})("quota"), True),  # SDK antigo
+    (_ErroApiFalso(500, "INTERNAL"), False),
+    (RuntimeError("rede"), False),
+])
+def test_cota_esgotada_e_marcada_no_llm_error(erro, cota):
+    sdk = _sdk_falso(erro=erro)
+    provedor = _provedor(sdk)
+    with pytest.raises(LlmError) as no_chat:
+        provedor.enviar_mensagem("c1", [], "oi")
+    with pytest.raises(LlmError) as na_geracao:
+        provedor.gerar("monte o SOAP")
+    assert no_chat.value.cota_esgotada is cota
+    assert na_geracao.value.cota_esgotada is cota
+
+
 def test_resposta_bloqueada_vira_llm_error():
     # google-genai devolve text=None em vez de levantar quando bloqueia
     sdk = _sdk_falso(resposta=None)

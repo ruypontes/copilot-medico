@@ -999,7 +999,7 @@ def generate_soap(consultation_id):
     except Exception as e:
         # So o tipo do erro no log: nunca o conteudo da consulta.
         print(f"[SOAP] Falha no modelo para a consulta {consulta_id}: {type(e).__name__}")
-        if type(e).__name__ == "ResourceExhausted":
+        if getattr(e, "cota_esgotada", False):
             return _json_error("Limite de uso da IA atingido. Aguarde alguns minutos e tente de novo.", 429)
         return _json_error("Nao foi possivel gerar o SOAP agora. Tente de novo.", 502)
 

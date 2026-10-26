@@ -11,7 +11,7 @@ Contrato:
   `formato_json` o modelo responde JSON; com `schema`, JSON nesse formato.
 
 Ambos devolvem texto. Falha do provedor (rede, cota, resposta bloqueada)
-levanta LlmError.
+levanta LlmError; cota esgotada vem com `cota_esgotada=True`.
 """
 import threading
 from abc import ABC, abstractmethod
@@ -20,7 +20,15 @@ from backend.config import settings
 
 
 class LlmError(Exception):
-    """Falha ao chamar o modelo de linguagem."""
+    """Falha ao chamar o modelo de linguagem.
+
+    `cota_esgotada` marca o limite de uso do provedor (HTTP 429): a rota do
+    SOAP responde 429 e o avaliar_soap espera antes de tentar de novo.
+    """
+
+    def __init__(self, mensagem: str = "", cota_esgotada: bool = False):
+        super().__init__(mensagem)
+        self.cota_esgotada = cota_esgotada
 
 
 class LlmProvider(ABC):

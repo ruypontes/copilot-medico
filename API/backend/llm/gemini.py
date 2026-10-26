@@ -36,6 +36,16 @@ SEGURANCA = [
 MAX_SESSOES = 128
 
 
+def _cota_esgotada(erro: Exception) -> bool:
+    """O google-genai indica cota esgotada com o codigo 429 (RESOURCE_EXHAUSTED);
+    o SDK antigo levantava ResourceExhausted."""
+    return (
+        getattr(erro, "code", None) == 429
+        or str(getattr(erro, "status", "") or "").upper() == "RESOURCE_EXHAUSTED"
+        or type(erro).__name__ in {"ResourceExhausted", "TooManyRequests"}
+    )
+
+
 def _texto(mensagem: dict) -> str:
     partes = mensagem.get("parts") or []
     return "".join(
@@ -98,6 +108,10 @@ class GeminiProvider(LlmProvider):
         texto = re.sub(r"key=[^&\s\"']+", "key=<redigida>", str(erro))
         return texto.replace(self.api_key, "<redigida>") if self.api_key else texto
 
+    def _falha(self, erro: Exception) -> LlmError:
+        return LlmError(f"Falha ao chamar o Gemini: {self._sem_chave(erro)}",
+                        cota_esgotada=_cota_esgotada(erro))
+
     def _texto_da_resposta(self, resposta) -> str:
         try:
             texto = resposta.text
@@ -129,7 +143,7 @@ class GeminiProvider(LlmProvider):
         try:
             resposta = chat.send_message(texto)
         except Exception as e:
-            raise LlmError(f"Falha ao chamar o Gemini: {self._sem_chave(e)}") from e
+            raise self._falha(e) from e
         texto_resposta = self._texto_da_resposta(resposta)
         with self._trava:
             self._sessoes[chave] = (chat, conversa + (("user", texto), ("model", texto_resposta)))
@@ -153,5 +167,5 @@ class GeminiProvider(LlmProvider):
         except LlmError:
             raise
         except Exception as e:
-            raise LlmError(f"Falha ao chamar o Gemini: {self._sem_chave(e)}") from e
+            raise self._falha(e) from e
         return self._texto_da_resposta(resposta)
