@@ -1041,10 +1041,9 @@ def save_soap_doctor_version(consultation_id, soap_id):
     consulta_id, patient_id, erro = _consulta_da_gravacao(consultation_id)
     if erro:
         return erro
-    repo = _soap()
-    documento = repo.obter(soap_id)
     # O id do SOAP vem na URL: nao pode editar o de outra consulta
-    if documento is None or documento["consultation_id"] != consulta_id:
+    repo, documento = _soap_da_consulta(consulta_id, soap_id)
+    if documento is None:
         return _json_error("SOAP nao encontrado nesta consulta.", 404)
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or "versao_medico" not in data:
@@ -1059,6 +1058,62 @@ def save_soap_doctor_version(consultation_id, soap_id):
     except TransicaoInvalida as e:
         return _json_error(str(e), 409)
     return jsonify({"status": "success", "soap": _soap_para_o_medico(documento, consulta_id, mapa)}), 200
+
+
+def _soap_da_consulta(consulta_id, soap_id):
+    """(repo, documento) se o SOAP da URL e desta consulta; senao (repo, None)."""
+    repo = _soap()
+    documento = repo.obter(soap_id)
+    if documento is None or documento["consultation_id"] != consulta_id:
+        return repo, None
+    return repo, documento
+
+
+@app.route('/api/consultations/<consultation_id>/soap/<soap_id>/approve', methods=['POST'])
+@roles_required("administrador", "medico")
+def approve_soap(consultation_id, soap_id):
+    """Aprova o SOAP (status `aprovado`). Pre-requisito do "Inserir no
+    prontuario" (B53); o botao Aprovar do SoapEditor (B43) usa esta rota.
+    Aprovar de novo nao muda nada; 409 se ja foi inserido no PEP."""
+    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+    repo, documento = _soap_da_consulta(consulta_id, soap_id)
+    if documento is None:
+        return _json_error("SOAP nao encontrado nesta consulta.", 404)
+    try:
+        documento = repo.aprovar(soap_id)
+    except TransicaoInvalida as e:
+        return _json_error(str(e), 409)
+    return jsonify({"status": "success", "soap": _soap_para_o_medico(documento, consulta_id)}), 200
+
+
+@app.route('/api/consultations/<consultation_id>/soap/<soap_id>/inserted', methods=['POST'])
+@roles_required("administrador", "medico")
+def mark_soap_inserted(consultation_id, soap_id):
+    """Registra que a extensao escreveu o SOAP no PEP (B53 / US019-CA006).
+
+    JSON: {"pep": "esus-pec" | "amplimed"}. A extensao chama depois que o
+    adaptador confirmou a escrita, sempre a partir de um clique do medico.
+    409 se o SOAP nao esta aprovado ou ja foi inserido.
+    """
+    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+    repo, documento = _soap_da_consulta(consulta_id, soap_id)
+    if documento is None:
+        return _json_error("SOAP nao encontrado nesta consulta.", 404)
+    data = request.get_json(silent=True)
+    pep = data.get("pep") if isinstance(data, dict) else None
+    if pep not in pep_import.PEP_ORIGENS:
+        return _json_error("Informe o PEP: " + ", ".join(pep_import.PEP_ORIGENS) + ".", 400)
+    try:
+        documento = repo.marcar_inserido_no_pep(soap_id)
+    except TransicaoInvalida as e:
+        return _json_error(str(e), 409)
+    # So metadados no log: nunca o texto do SOAP.
+    print(f"[SOAP] {soap_id} inserido no prontuario ({pep}).")
+    return jsonify({"status": "success", "soap": _soap_para_o_medico(documento, consulta_id)}), 200
 
 
 # Rota para obter EXCLUSIVAMENTE o histórico de transcrições de áudio

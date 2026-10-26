@@ -108,6 +108,24 @@ class DocumentoSoapRepository(Repositorio):
         self.sessao.commit()
         return para_dicionario(doc)
 
+    def marcar_inserido_no_pep(self, documento_id) -> dict | None:
+        """Registra que o SOAP foi escrito no prontuario (B53 / US019-CA006).
+
+        So vale a partir de `aprovado`: a extensao escreve no PEP depois do
+        clique do medico e so entao chama aqui. Uma segunda marcacao e
+        recusada, para a tela nao oferecer inserir de novo (texto duplicado).
+        """
+        doc = self._obter_modelo(documento_id)
+        if doc is None:
+            return None
+        if doc.status == StatusSoap.INSERIDO_NO_PEP:
+            raise TransicaoInvalida("SOAP ja inserido no prontuario.")
+        if doc.status != StatusSoap.APROVADO:
+            raise TransicaoInvalida("Aprove o SOAP antes de inserir no prontuario.")
+        doc.status = StatusSoap.INSERIDO_NO_PEP
+        self.sessao.commit()
+        return para_dicionario(doc)
+
     def aprovar(self, documento_id) -> dict | None:
         doc = self._obter_modelo(documento_id)
         if doc is None:
