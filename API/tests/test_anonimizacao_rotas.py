@@ -46,7 +46,7 @@ def payloads_capturados(monkeypatch):
         # Devolve tokens para exercitar a reidratacao na volta.
         return "Analise de [PACIENTE_1]: confira o CPF [CPF_1]."
 
-    monkeypatch.setattr(server.gemini_connection, "send_message", falso_send_message)
+    monkeypatch.setattr(server.chat_ia, "send_message", falso_send_message)
     return enviados
 
 

@@ -8,7 +8,7 @@ import speech_recognition as sr
 
 # Assuming these imports are correct and available
 from backend import audio_chunks
-from backend import gemini_connection
+from backend.llm import chat as chat_ia
 from backend import limpeza_audio
 from backend import pdf_reader
 from backend import pep_import
@@ -991,7 +991,7 @@ def generate_soap(consultation_id):
     texto_anonimo, mapa = _anonimizar_para_envio(material, patient_id, consulta_id)
 
     try:
-        resultado = soap_gerador.gerar_soap(texto_anonimo, gemini_connection.gerar_resposta_unica)
+        resultado = soap_gerador.gerar_soap(texto_anonimo, chat_ia.gerar_resposta_unica)
     except soap_gerador.SoapNaoGerado as e:
         print(f"[SOAP] Consulta {consulta_id}: SOAP invalido apos {e.tentativas} tentativas.")
         return jsonify({"status": "error", "message": "A IA nao gerou um SOAP valido. Tente de novo.",
@@ -999,7 +999,7 @@ def generate_soap(consultation_id):
     except Exception as e:
         # So o tipo do erro no log: nunca o conteudo da consulta.
         print(f"[SOAP] Falha no modelo para a consulta {consulta_id}: {type(e).__name__}")
-        if type(e).__name__ == "ResourceExhausted":
+        if getattr(e, "cota_esgotada", False):
             return _json_error("Limite de uso da IA atingido. Aguarde alguns minutos e tente de novo.", 429)
         return _json_error("Nao foi possivel gerar o SOAP agora. Tente de novo.", 502)
 
@@ -1387,7 +1387,7 @@ def handle_chat_message():
 
         _mensagens().adicionar(consultation_id, "user", texto_anonimo)
 
-        ai_response_text = gemini_connection.send_message(
+        ai_response_text = chat_ia.send_message(
             patient_id, consultation_id, texto_anonimo
         )
 
@@ -1490,7 +1490,7 @@ def _register_pep_import(patient_id, consultation_id, data, require_typed=False)
         )
 
         _mensagens().adicionar(consultation_id, "user", texto_anonimo)
-        ai_response_text = gemini_connection.send_message(
+        ai_response_text = chat_ia.send_message(
             patient_id, consultation_id, texto_anonimo
         )
         _mensagens().adicionar(consultation_id, "model", ai_response_text)
@@ -1629,8 +1629,7 @@ def upload_pdf():
         # Adiciona a mensagem ao histórico da consulta
         _mensagens().adicionar(consultation_id, "user", context_message_for_pdf)
 
-        # A assinatura correta é send_message(patient_id: str, consultation_id: str, message_text: str)
-        ai_response_text = gemini_connection.send_message(patient_id, consultation_id, context_message_for_pdf)
+        ai_response_text = chat_ia.send_message(patient_id, consultation_id, context_message_for_pdf)
 
         # Adiciona a resposta da IA ao histórico da consulta
         _mensagens().adicionar(consultation_id, "model", ai_response_text)
@@ -1819,7 +1818,7 @@ def handle_recommendations():
 
     texto_anonimo, mapa = _anonimizar_para_envio(trecho, patient_id, consultation_id)
     try:
-        bruta = gemini_connection.gerar_resposta_unica(recomendacoes.INSTRUCAO, texto_anonimo)
+        bruta = chat_ia.gerar_resposta_unica(recomendacoes.INSTRUCAO, texto_anonimo)
     except Exception as e:
         # So metadados no log: nunca o conteudo da consulta.
         print(f"[RECOMENDAÇÃO] Falha no modelo para a consulta {consultation_id}: {type(e).__name__}")

@@ -1,6 +1,6 @@
 """Repositorios de `consulta` e `mensagem`.
 
-As mensagens saem no formato que o front e o gemini_connection ja usam:
+As mensagens saem no formato que o front e o backend.llm ja usam:
 {"role": "user"|"model", "parts": [{"text": ...}], "timestamp": ...}.
 """
 from datetime import datetime, timedelta, timezone

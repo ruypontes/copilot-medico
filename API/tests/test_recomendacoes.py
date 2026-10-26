@@ -111,7 +111,7 @@ def modelo(monkeypatch):
         valor = resposta["valor"]
         return valor(conteudo) if callable(valor) else valor
 
-    monkeypatch.setattr(server.gemini_connection, "gerar_resposta_unica", falso)
+    monkeypatch.setattr(server.chat_ia, "gerar_resposta_unica", falso)
     return chamadas, resposta
 
 
