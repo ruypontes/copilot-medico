@@ -907,6 +907,383 @@ def transcribe_audio_route():
         # Limpeza
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+        # US017-CA007: o audio sai do servidor com ou sem sucesso (B35)
+        if tmp_path:
+            audio_chunks.apagar([tmp_path])
+
+
+# ---------------------------------------------------------------------------
+# Audio em partes (B30 / US017-CA003)
+#
+# A extensao grava a consulta e envia o audio em partes de ate 5 min, cada uma
+# com a sua sequencia. As partes ficam em disco so ate a transcricao: ao parar,
+# a extensao chama /transcribe, que junta o texto na ordem e apaga o audio.
+# ---------------------------------------------------------------------------
+
+def _consulta_da_gravacao(consultation_id):
+    """(id da consulta normalizado, id do paciente, erro) das rotas por consulta
+    (audio em partes, SOAP): 404 se nao existe, 403 se e de outro medico."""
+    patient_id = _consultas().paciente_da_consulta(consultation_id)
+    if not patient_id:
+        return None, None, _json_error("Consulta nao encontrada.", 404)
+    _patient_data, access_error = require_patient_access(patient_id)
+    if access_error:
+        return None, None, access_error
+    # O id vira nome de pasta em disco: usa a forma canonica do UUID.
+    return str(uuid.UUID(consultation_id.strip())), patient_id, None
+
+
+def _apagar_partes_esquecidas():
+    """Gravacoes nunca finalizadas (navegador fechado no meio) nao podem
+    deixar audio no servidor: apaga as partes mais velhas que o prazo."""
+    limite = datetime.now(timezone.utc) - timedelta(hours=settings.audio_chunk_ttl_hours)
+    audio_chunks.apagar(_partes_audio().remover_anteriores_a(limite))
+
+
+@app.route('/api/consultations/<consultation_id>/audio/chunks', methods=['POST'])
+@roles_required("administrador", "medico")
+def upload_audio_chunk(consultation_id):
+    """Recebe uma parte (WAV de ate 5 min) da gravacao da consulta.
+
+    multipart: audio_file, recording_id (gerado pela extensao a cada gravacao)
+    e seq (1, 2, 3...). Reenviar a mesma sequencia substitui a parte anterior,
+    entao a extensao pode repetir o envio com seguranca quando ele falha.
+    Responde 202: a parte fica guardada ate POST .../transcribe.
+    """
+    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+
+    audio_file = request.files.get('audio_file')
+    if audio_file is None:
+        return _json_error("Nenhum arquivo enviado.", 400)
+
+    try:
+        recording_id = audio_chunks.validar_recording_id(request.form.get('recording_id'))
+        seq = audio_chunks.validar_seq(request.form.get('seq'))
+        arquivo = audio_chunks.salvar(audio_file, consulta_id, recording_id, seq)
+    except audio_chunks.ParteInvalida as e:
+        return _json_error(str(e), e.status)
+
+    try:
+        _apagar_partes_esquecidas()
+        parte, caminho_substituido = _partes_audio().registrar(
+            consulta_id, recording_id, seq,
+            arquivo.caminho, arquivo.tamanho_bytes, arquivo.duracao_s,
+        )
+    except Exception:
+        # Sem a linha no banco o arquivo ficaria orfao em disco.
+        audio_chunks.apagar([arquivo.caminho])
+        raise
+    if caminho_substituido:
+        audio_chunks.apagar([caminho_substituido])
+
+    recebidas = [p["seq"] for p in _partes_audio().listar(consulta_id, recording_id)]
+    # So metadados no log: nunca o conteudo do audio.
+    print(f"[AUDIO] Parte {seq} da gravacao {recording_id} recebida "
+          f"({parte['duracao_s']:.0f}s, {parte['tamanho_bytes']} bytes).")
+    return jsonify({
+        "status": "accepted",
+        "consultation_id": consulta_id,
+        "recording_id": recording_id,
+        "seq": seq,
+        "duration": parte["duracao_s"],
+        "size_bytes": parte["tamanho_bytes"],
+        "replaced": caminho_substituido is not None,
+        "received": recebidas,
+    }), 202
+
+
+@app.route('/api/consultations/<consultation_id>/transcribe', methods=['POST'])
+@roles_required("administrador", "medico")
+def transcribe_recording(consultation_id):
+    """Transcreve a gravacao enviada em partes e apaga o audio do servidor.
+
+    JSON: recording_id e, opcionalmente, total_chunks (quantas partes a
+    extensao gerou). As partes sao transcritas na ordem da sequencia. Uma parte
+    que nao chegou ou que falha na transcricao NAO derruba a consulta: o texto
+    sai com as demais e `chunks` informa o que faltou (missing/failed).
+    A resposta tem o mesmo formato de /api/transcribe_audio.
+    """
+    consulta_id, patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+    try:
+        recording_id = audio_chunks.validar_recording_id(data.get('recording_id'))
+        total_chunks = data.get('total_chunks')
+        if total_chunks is not None:
+            total_chunks = audio_chunks.validar_seq(total_chunks, campo='total_chunks')
+    except audio_chunks.ParteInvalida as e:
+        return _json_error(str(e), e.status)
+
+    partes = _partes_audio().listar(consulta_id, recording_id)
+    if not partes:
+        return _json_error("Nenhuma parte de audio recebida para esta gravacao.", 404)
+
+    trechos = []  # (texto, turnos) das partes transcritas, em ordem
+    falhas = []
+    used_fallback = False
+    try:
+        for parte in partes:
+            try:
+                texto, turnos, _duracao, chunk_used_fallback = _transcrever_arquivo(
+                    parte["caminho"], parte["duracao_s"]
+                )
+            except Exception as e:
+                print(f"[TRANSCRIÇÃO] Parte {parte['seq']} falhou: {e}")
+                falhas.append(parte["seq"])
+                continue
+            if not texto or any(frase in texto for frase in FRASES_DE_AUDIO_INVALIDO):
+                falhas.append(parte["seq"])  # silencio ou ruido
+                continue
+            used_fallback = used_fallback or chunk_used_fallback
+            trechos.append((texto, turnos))
+    finally:
+        # US017-CA007: o audio sai do servidor com ou sem sucesso na transcricao.
+        audio_chunks.apagar(_partes_audio().remover(consulta_id, recording_id))
+
+    recebidas = [parte["seq"] for parte in partes]
+    esperadas = range(1, (total_chunks or recebidas[-1]) + 1)
+    resumo = {
+        "received": recebidas,
+        "missing": [seq for seq in esperadas if seq not in recebidas],
+        "failed": falhas,
+    }
+    resposta = {
+        "status": "success",
+        "consultation_id": consulta_id,
+        "recording_id": recording_id,
+        "chunks": resumo,
+        "used_fallback": used_fallback,
+    }
+
+    if not trechos:
+        return jsonify({
+            **resposta,
+            "transcription": "Não foi possível entender o áudio.",
+            "is_error": True,
+        }), 200
+
+    texto_final = "\n".join(texto for texto, _turnos in trechos)
+    # Se alguma parte veio diarizada, as que vieram so com texto entram como um
+    # turno sem papel definido, para nao sumirem do dialogo.
+    dialogo = None
+    if any(turnos for _texto, turnos in trechos):
+        dialogo = []
+        for texto, turnos in trechos:
+            dialogo.extend(turnos or [{"role": "Outro", "role_key": "other", "text": texto}])
+
+    log_entry = _transcricoes().adicionar(
+        patient_id,
+        consulta_id,
+        texto=texto_final,
+        duracao_s=sum(parte["duracao_s"] for parte in partes) or 1.0,
+        origem="extension",
+        metadados_audio={"persisted": False, "recording_id": recording_id, "chunks": resumo},
+        turnos=dialogo,
+    )
+    return jsonify({
+        **resposta,
+        "transcription": texto_final,
+        "log_entry": log_entry,
+        "is_error": False,
+    }), 200
+
+
+# ---------------------------------------------------------------------------
+# SOAP: versao da IA x versao do medico (B44 / US018)
+#
+# O documento e gravado pelo DocumentoSoapRepository (B39), sempre validado
+# pelo SoapV1: a IA cria (B40) e o medico edita aqui. Todo documento devolvido
+# traz `diff` por secao entre as duas versoes, que a extensao exibe (SoapDiff).
+# ---------------------------------------------------------------------------
+
+def _soap():
+    return DocumentoSoapRepository(sessao.obter_sessao())
+
+
+def _reidratar(valor, mapa):
+    """Troca os tokens ([PACIENTE], [CPF_1]...) pelos valores reais em toda a
+    estrutura. O SOAP fica tokenizado no banco, como o chat (ADR-03); so a
+    resposta ao medico e reidratada (US016-CA002)."""
+    if isinstance(valor, str):
+        return mapa.reidratar(valor)
+    if isinstance(valor, list):
+        return [_reidratar(item, mapa) for item in valor]
+    if isinstance(valor, dict):
+        return {chave: _reidratar(item, mapa) for chave, item in valor.items()}
+    return valor
+
+
+def _soap_para_o_medico(documento, consulta_id, mapa=None):
+    """Reidrata com o mapa da requisicao (POST/PUT) ou o salvo da consulta
+    (GET). Sem cofre aberto o mapa nao e persistido (B26): o GET mostra os
+    tokens, como o resto do sistema faz quando nao ha chave para abrir nomes."""
+    if mapa is None:
+        mapa = _mapas_anonimizacao().carregar(consulta_id, _cofre_atual())
+    return _reidratar(documento, mapa)
+
+
+def _material_da_consulta(patient_id, consulta_id):
+    """Transcricoes, dados do prontuario e mensagens do medico da consulta (B40)."""
+    desde_sempre = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    transcricoes = _transcricoes().listar_da_consulta_desde(consulta_id, desde_sempre)
+    dados = [d for d in reversed(_dados_extensao().listar(patient_id))
+             if d.get("consultation_id") == consulta_id]
+    mensagens = _mensagens().historico(consulta_id)
+    return montar_material(transcricoes, dados, mensagens)
+
+
+@app.route('/api/consultations/<consultation_id>/soap', methods=['POST'])
+@roles_required("administrador", "medico")
+def generate_soap(consultation_id):
+    """Gera o SOAP da consulta pela IA e grava como versao da IA (B40 / US018-CA001).
+
+    Junta transcricoes, dados do prontuario e mensagens do medico, anonimiza
+    (US016), chama o Gemini com o prompt versionado e o response_schema do
+    SoapV1 (ADR-05) e valida. JSON invalido ganha UMA nova tentativa; se falhar
+    de novo, 502 com os erros. O SOAP e gravado tokenizado e devolvido reidratado.
+    """
+    consulta_id, patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+
+    material = _material_da_consulta(patient_id, consulta_id)
+    if not material:
+        return _json_error(
+            "A consulta ainda nao tem transcricao, dados do prontuario ou anotacoes para gerar o SOAP.", 400
+        )
+    texto_anonimo, mapa = _anonimizar_para_envio(material, patient_id, consulta_id)
+
+    try:
+        resultado = soap_gerador.gerar_soap(texto_anonimo, gemini_connection.gerar_resposta_unica)
+    except soap_gerador.SoapNaoGerado as e:
+        print(f"[SOAP] Consulta {consulta_id}: SOAP invalido apos {e.tentativas} tentativas.")
+        return jsonify({"status": "error", "message": "A IA nao gerou um SOAP valido. Tente de novo.",
+                        "errors": e.erros}), 502
+    except Exception as e:
+        # So o tipo do erro no log: nunca o conteudo da consulta.
+        print(f"[SOAP] Falha no modelo para a consulta {consulta_id}: {type(e).__name__}")
+        if type(e).__name__ == "ResourceExhausted":
+            return _json_error("Limite de uso da IA atingido. Aguarde alguns minutos e tente de novo.", 429)
+        return _json_error("Nao foi possivel gerar o SOAP agora. Tente de novo.", 502)
+
+    documento = _soap().criar(
+        consulta_id,
+        resultado.soap.model_dump(mode="json"),
+        prompt_id=soap_gerador.PROMPT_ID,
+        prompt_versao=soap_gerador.PROMPT_VERSAO,
+    )
+    print(f"[SOAP] Consulta {consulta_id}: SOAP gerado em {resultado.tentativas} tentativa(s).")
+    return jsonify({
+        "status": "success",
+        "soap": _soap_para_o_medico(documento, consulta_id, mapa),
+        "tentativas": resultado.tentativas,
+    }), 201
+
+
+@app.route('/api/consultations/<consultation_id>/soap', methods=['GET'])
+@roles_required("administrador", "medico")
+def get_soap(consultation_id):
+    """SOAP mais recente da consulta, com `diff` (null enquanto o medico nao editou)."""
+    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+    documento = _soap().mais_recente(consulta_id)
+    if documento is None:
+        return _json_error("Nenhum SOAP gerado para esta consulta.", 404)
+    return jsonify({"status": "success", "soap": _soap_para_o_medico(documento, consulta_id)}), 200
+
+
+@app.route('/api/consultations/<consultation_id>/soap/<soap_id>', methods=['PUT'])
+@roles_required("administrador", "medico")
+def save_soap_doctor_version(consultation_id, soap_id):
+    """Grava a versao do medico. JSON: {"versao_medico": <SoapV1>}.
+
+    A versao da IA nao muda. 400 com `errors` campo a campo se o SoapV1 for
+    violado; 409 se o SOAP ja foi aprovado ou inserido no PEP.
+    """
+    consulta_id, patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+    # O id do SOAP vem na URL: nao pode editar o de outra consulta
+    repo, documento = _soap_da_consulta(consulta_id, soap_id)
+    if documento is None:
+        return _json_error("SOAP nao encontrado nesta consulta.", 404)
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or "versao_medico" not in data:
+        return _json_error("Envie {\"versao_medico\": {...}}.", 400)
+    # O medico edita o texto reidratado; volta a ser tokenizado antes de gravar,
+    # com o mesmo mapa da consulta (o mesmo nome vira o mesmo token).
+    versao_medico, mapa = _anonimizar_estrutura_da_consulta(data["versao_medico"], patient_id, consulta_id)
+    try:
+        documento = repo.salvar_edicao(soap_id, versao_medico)
+    except SoapInvalido as e:
+        return jsonify({"status": "error", "message": str(e), "errors": e.erros}), 400
+    except TransicaoInvalida as e:
+        return _json_error(str(e), 409)
+    return jsonify({"status": "success", "soap": _soap_para_o_medico(documento, consulta_id, mapa)}), 200
+
+
+def _soap_da_consulta(consulta_id, soap_id):
+    """(repo, documento) se o SOAP da URL e desta consulta; senao (repo, None)."""
+    repo = _soap()
+    documento = repo.obter(soap_id)
+    if documento is None or documento["consultation_id"] != consulta_id:
+        return repo, None
+    return repo, documento
+
+
+@app.route('/api/consultations/<consultation_id>/soap/<soap_id>/approve', methods=['POST'])
+@roles_required("administrador", "medico")
+def approve_soap(consultation_id, soap_id):
+    """Aprova o SOAP (status `aprovado`). Pre-requisito do "Inserir no
+    prontuario" (B53); o botao Aprovar do SoapEditor (B43) usa esta rota.
+    Aprovar de novo nao muda nada; 409 se ja foi inserido no PEP."""
+    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+    repo, documento = _soap_da_consulta(consulta_id, soap_id)
+    if documento is None:
+        return _json_error("SOAP nao encontrado nesta consulta.", 404)
+    try:
+        documento = repo.aprovar(soap_id)
+    except TransicaoInvalida as e:
+        return _json_error(str(e), 409)
+    return jsonify({"status": "success", "soap": _soap_para_o_medico(documento, consulta_id)}), 200
+
+
+@app.route('/api/consultations/<consultation_id>/soap/<soap_id>/inserted', methods=['POST'])
+@roles_required("administrador", "medico")
+def mark_soap_inserted(consultation_id, soap_id):
+    """Registra que a extensao escreveu o SOAP no PEP (B53 / US019-CA006).
+
+    JSON: {"pep": "esus-pec" | "amplimed"}. A extensao chama depois que o
+    adaptador confirmou a escrita, sempre a partir de um clique do medico.
+    409 se o SOAP nao esta aprovado ou ja foi inserido.
+    """
+    consulta_id, _patient_id, erro = _consulta_da_gravacao(consultation_id)
+    if erro:
+        return erro
+    repo, documento = _soap_da_consulta(consulta_id, soap_id)
+    if documento is None:
+        return _json_error("SOAP nao encontrado nesta consulta.", 404)
+    data = request.get_json(silent=True)
+    pep = data.get("pep") if isinstance(data, dict) else None
+    if pep not in pep_import.PEP_ORIGENS:
+        return _json_error("Informe o PEP: " + ", ".join(pep_import.PEP_ORIGENS) + ".", 400)
+    try:
+        documento = repo.marcar_inserido_no_pep(soap_id)
+    except TransicaoInvalida as e:
+        return _json_error(str(e), 409)
+    # So metadados no log: nunca o texto do SOAP.
+    print(f"[SOAP] {soap_id} inserido no prontuario ({pep}).")
+    return jsonify({"status": "success", "soap": _soap_para_o_medico(documento, consulta_id)}), 200
+
 
 # Rota para obter EXCLUSIVAMENTE o histórico de transcrições de áudio
 @app.route('/api/patients/<patient_id>/transcription-log', methods=['GET'])
