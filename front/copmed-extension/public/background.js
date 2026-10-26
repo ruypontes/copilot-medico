@@ -86,6 +86,56 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // ---------------------------------------------------------------------------
+// Botao flutuante do PEP (B52)
+//
+// O content script (src/content/main.ts) le as notas pelo adaptador do PEP
+// detectado e manda aqui; o envio vai para a consulta selecionada no popup, na
+// mesma rota tipada do botao "Extrair Dados da Pagina" (pep-import).
+// ---------------------------------------------------------------------------
+async function importarDoPep(message, sender) {
+  const local = await chrome.storage.local.get(['consultationId', API_URL_KEY]);
+  const session = await chrome.storage.session.get([TOKEN_KEY]);
+  const token = session[TOKEN_KEY];
+  if (!token) return { ok: false, mensagem: 'Entre na extensao primeiro' };
+  if (!local.consultationId) return { ok: false, mensagem: 'Selecione paciente e consulta na extensao' };
+
+  const apiUrl = local[API_URL_KEY] || DEFAULT_API_URL;
+  const response = await fetch(
+    `${apiUrl}/api/consultations/${encodeURIComponent(local.consultationId)}/pep-import`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        pep_origem: message.pep_origem,
+        source_url: message.source_url || sender.tab?.url || null,
+        campos: message.campos,
+      }),
+    }
+  );
+  if (response.status === 401) {
+    await chrome.storage.session.remove(SESSION_KEYS);
+    return { ok: false, mensagem: 'Sessao expirada: entre de novo' };
+  }
+  const data = await response.json().catch(() => ({}));
+  // So a mensagem da API volta ao botao: nunca o conteudo enviado.
+  return response.ok ? { ok: true } : { ok: false, mensagem: data.message || 'Nao foi possivel enviar' };
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== 'pep:import') return;
+  // Vem do nosso content script, que roda so nos dominios dos PEPs (manifest).
+  if (sender.id !== chrome.runtime.id || !sender.tab) {
+    sendResponse({ ok: false, mensagem: 'forbidden' });
+    return;
+  }
+  importarDoPep(message, sender).then(sendResponse, (error) => {
+    console.error('Erro ao enviar dados do PEP:', error?.name || error);
+    sendResponse({ ok: false, mensagem: 'Sem conexao com a API' });
+  });
+  return true; // resposta assincrona
+});
+
+// ---------------------------------------------------------------------------
 // Gravacao da consulta (B29/B30)
 //
 // Quem grava e o documento offscreen (src/offscreen/main.ts): o popup e destruido ao fechar

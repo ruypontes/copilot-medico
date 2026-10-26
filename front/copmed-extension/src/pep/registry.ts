@@ -8,6 +8,7 @@
  * testes não interfiram uns nos outros.
  */
 
+import { amplimedAdapter } from "./amplimed";
 import { esusPecAdapter } from "./esusPec";
 import type { PepAdapter, PepRegistry } from "./pepAdapter";
 
@@ -96,4 +97,5 @@ export function createPepRegistry(): PepRegistry {
  */
 export const pepRegistry: PepRegistry = createPepRegistry();
 
+pepRegistry.register(amplimedAdapter);
 pepRegistry.register(esusPecAdapter);
