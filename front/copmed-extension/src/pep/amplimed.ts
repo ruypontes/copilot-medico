@@ -1,3 +1,5 @@
+import type { PatientInfo, PepAdapter, WriteEvolutionResult } from "./pepAdapter";
+
 /** Extrai campos do Amplimed. Mantida sem dependencias externas para injecao via chrome.scripting. */
 export function extractAmplimedData(page: Document = document): Record<string, string> | null {
   const fields: Record<string, string> = {};
@@ -26,3 +28,40 @@ export function extractAmplimedData(page: Document = document): Record<string, s
 
   return Object.keys(fields).length > 0 ? fields : null;
 }
+/**
+ * Adaptador do Amplimed (US019-CA002), por ora só de leitura: detecta a tela
+ * do prontuário e lê os sinais vitais e as notas (B52). A escrita da evolução
+ * é o B49; até lá `writeEvolution` responde `campo_nao_encontrado`, e o botão
+ * "Inserir no prontuário" (B53) mostra que o Amplimed ainda não recebe o SOAP.
+ */
+export function criarAmplimedAdapter(): PepAdapter {
+  return {
+    id: "amplimed",
+
+    detect(page: Document = document): boolean {
+      try {
+        return page.querySelector("input[f_prontuario], .note-editable[role='textbox']") !== null;
+      } catch {
+        return false;
+      }
+    },
+
+    readPatient(): PatientInfo | null {
+      return null; // o cabeçalho do paciente entra com o B49
+    },
+
+    readClinicalNotes(page: Document = document): Record<string, string> | null {
+      try {
+        return extractAmplimedData(page);
+      } catch {
+        return null;
+      }
+    },
+
+    async writeEvolution(): Promise<WriteEvolutionResult> {
+      return { ok: false, motivo: "campo_nao_encontrado" };
+    },
+  };
+}
+
+export const amplimedAdapter: PepAdapter = criarAmplimedAdapter();

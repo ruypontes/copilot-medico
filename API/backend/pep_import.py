@@ -44,6 +44,17 @@ NOTAS = {
     "lista_problemas": "Lista de problemas",
 }
 
+# SOAP nativo do e-SUS PEC, lido pelo EsusPecAdapter (B50) e enviado pelo
+# botao flutuante (B52). Validado como nota, com o mesmo limite.
+NOTAS_PEC = {
+    "subjetivo": "Subjetivo",
+    "objetivo": "Objetivo",
+    "avaliacao": "Avaliacao",
+    "plano": "Plano",
+}
+
+_TODAS_AS_NOTAS = {**NOTAS, **NOTAS_PEC}
+
 MAX_SINAL_VITAL_CHARS = 20
 MAX_NOTA_CHARS = 20000
 
@@ -83,14 +94,14 @@ def parse_pep_import(data):
     if not isinstance(campos, dict):
         raise PepImportError("campos e obrigatorio e deve ser um objeto.")
 
-    conhecidos = set(SINAIS_VITAIS) | set(NOTAS)
+    conhecidos = set(SINAIS_VITAIS) | set(_TODAS_AS_NOTAS)
     desconhecidos = sorted(str(chave) for chave in campos if chave not in conhecidos)
     if desconhecidos:
         raise PepImportError("campos contem chaves desconhecidas: " + ", ".join(desconhecidos) + ".")
 
     normalizados = {}
     for chave, limite in [(k, MAX_SINAL_VITAL_CHARS) for k in SINAIS_VITAIS] + [
-        (k, MAX_NOTA_CHARS) for k in NOTAS
+        (k, MAX_NOTA_CHARS) for k in _TODAS_AS_NOTAS
     ]:
         if chave not in campos:
             continue
@@ -111,7 +122,7 @@ def summarize(normalizado):
     """Resumo do que foi registrado. So nomes de campo: nunca conteudo clinico."""
     campos = normalizado["campos"]
     sinais = [k for k in SINAIS_VITAIS if k in campos]
-    notas = [k for k in NOTAS if k in campos]
+    notas = [k for k in _TODAS_AS_NOTAS if k in campos]
     return {
         "pep_origem": normalizado["pep_origem"],
         "sinais_vitais": sinais,
@@ -133,10 +144,10 @@ def format_for_prompt(normalizado, source_url=None):
         linhas.extend(["", "Sinais vitais:"])
         linhas.extend(f"- {SINAIS_VITAIS[k]}: {campos[k]}" for k in sinais)
 
-    notas = [k for k in NOTAS if k in campos]
+    notas = [k for k in _TODAS_AS_NOTAS if k in campos]
     if notas:
         linhas.extend(["", "Notas clinicas:"])
         for k in notas:
-            linhas.append(f"{NOTAS[k]}: {campos[k]}")
+            linhas.append(f"{_TODAS_AS_NOTAS[k]}: {campos[k]}")
 
     return "\n".join(linhas)

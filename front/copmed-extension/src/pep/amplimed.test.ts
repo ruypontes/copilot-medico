@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { extractAmplimedData } from "./amplimed";
+import { amplimedAdapter, extractAmplimedData } from "./amplimed";
+import { pepRegistry } from "./registry";
+import { criarPaginaPec } from "../test/esusPecPagina";
 import fixture from "../../tests/fixtures/pep/amplimed-consulta.html?raw";
 
 describe("extractAmplimedData", () => {
@@ -29,5 +31,27 @@ describe("extractAmplimedData", () => {
     document.body.innerHTML = '<input f_prontuario="peso" value=" "><input f_prontuario="cpf" value="123">';
 
     expect(extractAmplimedData(document)).toBeNull();
+  });
+});
+describe("amplimedAdapter (B52)", () => {
+  it("detecta o prontuário do Amplimed e lê as notas pela mesma extração", () => {
+    document.body.innerHTML = fixture;
+    expect(amplimedAdapter.detect(document)).toBe(true);
+    expect(amplimedAdapter.readClinicalNotes(document)).toEqual(extractAmplimedData(document));
+    expect(pepRegistry.detect(document)?.id).toBe("amplimed");
+  });
+
+  it("não detecta página comum nem o e-SUS PEC", () => {
+    document.body.innerHTML = "<form><input name='senha'><textarea></textarea></form>";
+    expect(amplimedAdapter.detect(document)).toBe(false);
+    expect(amplimedAdapter.detect(criarPaginaPec())).toBe(false);
+  });
+
+  it("ainda não escreve a evolução (B49)", async () => {
+    document.body.innerHTML = fixture;
+    expect(await amplimedAdapter.writeEvolution("Subjetivo: x", document)).toEqual({
+      ok: false,
+      motivo: "campo_nao_encontrado",
+    });
   });
 });

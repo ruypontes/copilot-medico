@@ -290,6 +290,22 @@ export function saveSoapDoctorVersion(consultationId: string, soapId: string, ve
   });
 }
 
+const soapPath = (consultationId: string, soapId: string) =>
+  `/api/consultations/${encodeURIComponent(consultationId)}/soap/${encodeURIComponent(soapId)}`;
+
+// Aprovação do SOAP: pré-requisito do "Inserir no prontuário" (B53); o SoapEditor (B43) usa também.
+export function approveSoap(consultationId: string, soapId: string) {
+  return apiRequest(`${soapPath(consultationId, soapId)}/approve`, { method: "POST" });
+}
+
+// Registra que o SOAP foi escrito no PEP (status inserido_no_pep). Só depois da escrita confirmada.
+export function markSoapInserted(consultationId: string, soapId: string, pep: string) {
+  return apiRequest(`${soapPath(consultationId, soapId)}/inserted`, {
+    method: "POST",
+    body: JSON.stringify({ pep }),
+  });
+}
+
 export function getTranscriptionLog(patientId: string) {
   return apiRequest(`/api/patients/${encodeURIComponent(patientId)}/transcription-log`);
 }
