@@ -1607,7 +1607,6 @@ def handle_recommendations():
             OPERACAO_RECOMENDACAO,
             patient_id,
             consultation_id,
-            prompt_recomendacao_medica
         )
     desde = datetime.now(timezone.utc) - timedelta(minutes=janela_min)
     transcricoes = _transcricoes().listar_da_consulta_desde(consultation_id, desde)
