@@ -1,0 +1,31 @@
+{
+  "descricao": "Consulta do cenário feliz do E2E (B56). O áudio é o caso 02 do B37 e a transcrição é o gabarito dele (API/eval/referencias_b37.txt). O SOAP segue o SOAP de referência do mesmo caso, no formato SoapV1. Dados fictícios.",
+  "audio": "API/eval/audio/caso-02-infeccao-respiratoria.wav",
+  "paciente": { "nome": "Helena Duarte Lima", "sexo": "Feminino", "idade": "38 anos e 2 meses" },
+  "medico": {
+    "nome": "Médica E2E",
+    "email": "medica.e2e@copmed.test",
+    "senha": "SenhaE2e2026"
+  },
+  "transcricao": [
+    { "papel": "medico", "texto": "Há quanto tempo está tossindo?" },
+    { "papel": "paciente", "texto": "Faz cinco dias. No começo era tosse seca, mas agora sai um pouco de catarro." },
+    { "papel": "medico", "texto": "Teve febre ou falta de ar?" },
+    { "papel": "paciente", "texto": "Tive febre de trinta e oito graus anteontem. Falta de ar, não." },
+    { "papel": "medico", "texto": "Tem alguma doença crônica ou alergia a medicamentos?" },
+    { "papel": "paciente", "texto": "Tenho rinite. Não conheço nenhuma alergia a remédios." },
+    { "papel": "medico", "texto": "Certo. Vou examinar sua respiração e avaliar a necessidade de exames conforme os achados." }
+  ],
+  "resposta_chat": "Transcrição recebida. (Resposta fixa da IA simulada no teste E2E.)",
+  "soap": {
+    "subjetivo": "Paciente relata tosse há cinco dias, inicialmente seca e atualmente com pequena quantidade de catarro. Refere febre de 38 °C anteontem. Nega falta de ar. Informa histórico de rinite e ausência de alergias medicamentosas conhecidas.",
+    "objetivo": "Temperatura de 38 °C relatada pelo paciente, referente a anteontem. Não foram fornecidos sinais vitais atuais ou achados de exame físico.",
+    "avaliacao": "Síndrome respiratória aguda a esclarecer. As informações disponíveis não permitem definir etiologia viral, bacteriana ou outro diagnóstico específico.",
+    "plano": "Realizar exame respiratório e avaliar necessidade de exames complementares de acordo com os achados clínicos.",
+    "hipoteses": [
+      { "descricao": "Infecção respiratória aguda a esclarecer", "cid10": "R05", "confianca": "media" }
+    ],
+    "alertas": ["Retornar antes se surgir falta de ar ou piora da febre"],
+    "pendencias": ["Sinais vitais atuais", "Ausculta pulmonar"]
+  }
+}
