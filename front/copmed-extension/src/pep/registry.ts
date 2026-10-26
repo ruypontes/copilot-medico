@@ -8,6 +8,7 @@
  * testes não interfiram uns nos outros.
  */
 
+import { esusPecAdapter } from "./esusPec";
 import type { PepAdapter, PepRegistry } from "./pepAdapter";
 
 /**
@@ -94,3 +95,5 @@ export function createPepRegistry(): PepRegistry {
  * em vez de reutilizar esta.
  */
 export const pepRegistry: PepRegistry = createPepRegistry();
+
+pepRegistry.register(esusPecAdapter);
