@@ -16,9 +16,16 @@ describe("comandos do popup ao content script", () => {
     expect(ehComandoPep(null)).toBe(false);
   });
 
-  it("status devolve o PEP detectado ou null fora de PEP", async () => {
+  it("status devolve o PEP detectado e o paciente do cabeçalho, ou null fora de PEP", async () => {
+    expect(await tratarComandoPep({ type: "pep:status" }, pepRegistry, criarPaginaPec())).toEqual({
+      pep: "esus-pec",
+      paciente: { nome: "Paciente Fictício Copmed", sexo: "Feminino", idade: "38 anos e 2 meses" },
+    });
     document.body.innerHTML = fixtureAmplimed;
-    expect(await tratarComandoPep({ type: "pep:status" }, pepRegistry, document)).toEqual({ pep: "amplimed" });
+    expect(await tratarComandoPep({ type: "pep:status" }, pepRegistry, document)).toEqual({
+      pep: "amplimed",
+      paciente: null,
+    });
     document.body.innerHTML = "<p>outro site</p>";
     expect(await tratarComandoPep({ type: "pep:status" }, pepRegistry, document)).toBeNull();
   });
