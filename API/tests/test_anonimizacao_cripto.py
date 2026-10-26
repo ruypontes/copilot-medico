@@ -311,6 +311,19 @@ def test_nome_volta_legivel_com_o_mesmo_cofre(temp_db_file):
     assert lido["name"] == "Maria Souza"
 
 
+def test_criar_com_cofre_devolve_o_nome_legivel(temp_db_file):
+    """A resposta do POST /api/patients sai daqui: com o pseudonimo, a extensao
+    mostrava e guardava "PAC-..." logo depois de criar o paciente (achado do B56)."""
+    from repositories import PacienteRepository
+
+    cofre, _, _ = cripto.criar_cofre(SENHA)
+    criado = PacienteRepository(sessao.obter_sessao(), cofre).criar(
+        nome="Maria Souza", medico_id=TEST_USER_ID
+    )
+
+    assert criado["name"] == "Maria Souza"
+
+
 def test_sem_cofre_o_nome_cifrado_vira_pseudonimo(temp_db_file):
     """Degrada para o pseudonimo em vez de mentir "Desconhecido"."""
     from repositories import PacienteRepository
