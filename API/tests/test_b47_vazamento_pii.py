@@ -32,8 +32,9 @@ Rotas cobertas
 
 Fora de escopo
 --------------
-- Áudio enviado ao Gemini para transcrição (B31): outro fluxo.
-- Rotas de recomendações, PDF e pep-import.
+- Áudio transcrito e PDF: cobertos ponta a ponta no B60
+  (test_b60_vazamento_completo.py), com este mesmo verificador.
+- Rota pep-import.
 - Nomes de terceiros (mãe em caso-19/20) sem spaCy: cobertos num teste
   separado, com skip claro quando o modelo não está instalado.
 """
