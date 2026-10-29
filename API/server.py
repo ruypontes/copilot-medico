@@ -1374,7 +1374,9 @@ def handle_chat_message():
         if consultation_id and not _consultas().pertence_ao_paciente(patient_id, consultation_id):
             return _json_error("Consulta nao encontrada para este paciente.", 404)
 
-        print(f"\nMensagem recebida para Paciente ID {patient_id}, Consulta ID {consultation_id}: {user_message}")
+        # So metadados no log (RNF08): o texto podia trazer nome, CPF e a
+        # transcricao inteira da consulta (B60).
+        print(f"[CHAT] Mensagem recebida para a consulta {consultation_id} ({len(str(user_message))} caracteres).")
 
         # Anonimiza antes de qualquer saida (US016-CA001). O texto guardado
         # e o tokenizado: a coluna chama-se `conteudo_pseudonimizado`.

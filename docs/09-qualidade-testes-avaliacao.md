@@ -8,7 +8,7 @@
 | Contrato de API | pytest + `app.test_client()` | cada rota: auth, validação, isolamento por médico | 100 % das rotas |
 | Unitário front | Vitest + jsdom | adaptadores de PEP com fixtures HTML; `formatSoapForPep`; client de API (fila offline) | todos os adaptadores |
 | Ponta a ponta | Playwright (Chromium com extensão carregada) | fluxo login → paciente → gravar (áudio de fixture) → SOAP → inserir na fixture do PEP | 1 cenário feliz por PEP, rodado no CI noturno |
-| Vazamento de PII | pytest, marcado `@leak` | 20 casos + 10 transcrições: nenhum padrão sensível no payload capturado do provedor mockado | 0 ocorrências, bloqueante |
+| Vazamento de PII | pytest, marcado `@leak` | os 20 casos com PII plantada passando por chat e SOAP (B47) e, ponta a ponta, por áudio transcrito (partes → transcrição → chat, sugestões e SOAP) e por PDF real (upload → chat e SOAP) (B60); o payload inclui o histórico do chat, e o log do servidor também é checado. As 10 referências da B37 não têm PII plantada e ficam no eval | 0 ocorrências fora das lacunas documentadas no B47, bloqueante |
 | Avaliação da IA | `eval/run_eval.py` | ver seção 3 | relatório por release |
 
 Herança: os 7 arquivos de teste da Equipe 6 são consertados na Sprint 1 (alvos de `patch` corrigidos para `app.blueprints.*`) e migrados para pytest puro.
