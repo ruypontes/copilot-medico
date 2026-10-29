@@ -1,7 +1,18 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
-import { extractAmplimedData } from "./amplimed";
+import { describe, expect, it, vi } from "vitest";
+import type { SoapV1 } from "../features/shared/types";
+import { AmplimedAdapter, extractAmplimedData, formatSoapForPep } from "./amplimed";
 import fixture from "../../tests/fixtures/pep/amplimed-consulta.html?raw";
+
+const soap: SoapV1 = {
+  subjetivo: "Febre há três dias.",
+  objetivo: "Temperatura de 37,8 °C.",
+  avaliacao: "Quadro compatível com virose.",
+  plano: "Manter hidratação e observação.",
+  hipoteses: [{ descricao: "Virose", cid10: "B34.9", confianca: "media" }],
+  alertas: ["Retornar se houver piora."],
+  pendencias: ["Reavaliar em três dias."],
+};
 
 describe("extractAmplimedData", () => {
   it("extrai os oito sinais vitais e as quatro notas da fixture Amplimed", () => {
@@ -29,5 +40,44 @@ describe("extractAmplimedData", () => {
     document.body.innerHTML = '<input f_prontuario="peso" value=" "><input f_prontuario="cpf" value="123">';
 
     expect(extractAmplimedData(document)).toBeNull();
+  });
+});
+
+describe("AmplimedAdapter", () => {
+  it("formata as seções SOAP e detalhes clínicos adicionais em texto simples", () => {
+    expect(formatSoapForPep(soap)).toBe(
+      [
+        "S - Subjetivo\nFebre há três dias.",
+        "O - Objetivo\nTemperatura de 37,8 °C.",
+        "A - Avaliação\nQuadro compatível com virose.",
+        "P - Plano\nManter hidratação e observação.",
+        "Hipóteses\n- Virose (CID-10: B34.9; confiança: média)",
+        "Alertas\n- Retornar se houver piora.",
+        "Pendências\n- Reavaliar em três dias.",
+      ].join("\n\n")
+    );
+  });
+
+  it("escreve o SOAP no campo de evolução da fixture e dispara eventos de edição", () => {
+    document.body.innerHTML = fixture;
+    const field = document.querySelector<HTMLTextAreaElement>('[f_prontuario="evolucao"]');
+    const inputListener = vi.fn();
+    const changeListener = vi.fn();
+    field?.addEventListener("input", inputListener);
+    field?.addEventListener("change", changeListener);
+
+    new AmplimedAdapter(document).writeEvolution(formatSoapForPep(soap));
+
+    expect(field?.value).toContain("S - Subjetivo\nFebre há três dias.");
+    expect(field?.value).toContain("P - Plano\nManter hidratação e observação.");
+    expect(inputListener).toHaveBeenCalledOnce();
+    expect(changeListener).toHaveBeenCalledOnce();
+  });
+
+  it("informa claramente quando o campo de evolução não existe", () => {
+    document.body.innerHTML = "";
+
+    expect(() => new AmplimedAdapter(document).writeEvolution("SOAP"))
+      .toThrow("Campo de evolução do Amplimed não encontrado.");
   });
 });
