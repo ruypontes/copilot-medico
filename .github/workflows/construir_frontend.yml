@@ -48,6 +48,12 @@ jobs:
       - name: Checagem de tipos (tsc)
         run: npx tsc -b
 
+      - name: Testes (vitest)
+        # B54: os adaptadores dos PEPs (Amplimed e e-SUS PEC) sobre as fixtures HTML, em jsdom, e o
+        # restante da extensão. O E2E (Playwright) tem workflow próprio. O NOME DO JOB não muda:
+        # é o check exigido pela proteção de branch.
+        run: npm test
+
       - name: Build (vite)
         # Popup/offscreen e, a parte, o content script em IIFE (B52)
         run: npx vite build && npm run build:content

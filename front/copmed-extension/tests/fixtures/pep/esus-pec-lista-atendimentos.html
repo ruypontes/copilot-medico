@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>e-SUS PEC - Lista de atendimentos (fictício)</title></head>
+<body>
+  <!-- Fixture B54: OUTRA tela do e-SUS PEC, que não é o atendimento. O adaptador do PEC não pode
+       reconhecê-la: não há as quatro abas SOAP nem o cabeçalho do cidadão. O <header> traz um
+       <h2>, mas sem "Nasceu em" (não é o cabeçalho do cidadão); a tabela traz a expressão
+       "Nasceu em" fora do <header>, que também não vale. -->
+  <header><h2>Lista de atendimentos</h2></header>
+  <main>
+    <table>
+      <thead><tr><th>Cidadão</th><th>Situação</th></tr></thead>
+      <tbody>
+        <tr><td>Paciente Fictício A (Nasceu em 01/01/1980)</td><td>Aguardando</td></tr>
+        <tr><td>Paciente Fictício B (Nasceu em 02/02/1990)</td><td>Em atendimento</td></tr>
+      </tbody>
+    </table>
+  </main>
+</body>
+</html>

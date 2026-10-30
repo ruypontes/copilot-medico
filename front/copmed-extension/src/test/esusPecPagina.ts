@@ -112,7 +112,7 @@ export function htmlPaginaPec({
  * Faz o papel do Draft.js na colagem: cancela o evento e acrescenta o
  * texto colado ao fim do editor, refazendo os blocos (um por linha).
  */
-function simularDraft(page: Document): void {
+export function simularDraft(page: Document): void {
   page.querySelectorAll<HTMLElement>(".public-DraftEditor-content").forEach((editor) => {
     editor.addEventListener("paste", (evento) => {
       const colado = (evento as ClipboardEvent).clipboardData?.getData("text/plain") ?? "";

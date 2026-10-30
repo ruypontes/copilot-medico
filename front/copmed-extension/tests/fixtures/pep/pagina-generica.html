@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Entrar - Webmail (página qualquer)</title></head>
+<body>
+  <!-- Fixture B54: página que NÃO é PEP. Nenhum adaptador pode reconhecê-la nem mexer nela.
+       Tem formulário, textarea e um editor contenteditable (como um webmail) de propósito:
+       o adaptador não pode confundir "qualquer campo editável" com o campo do PEP. -->
+  <header><h2>Entrar na conta</h2></header>
+  <main>
+    <form action="/login" method="post">
+      <input name="usuario" type="text">
+      <input name="senha" type="password">
+      <textarea name="mensagem">Texto de uma mensagem qualquer.</textarea>
+      <div contenteditable="true" class="editor-de-email">Rascunho de e-mail.</div>
+      <button type="submit">Entrar</button>
+    </form>
+  </main>
+</body>
+</html>
