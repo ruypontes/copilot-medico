@@ -30,7 +30,7 @@ def _campos_schema():
     properties.update({
         chave: {"type": "string", "maxLength": pep_import.MAX_NOTA_CHARS,
                 "description": f"Nota clinica: {rotulo}."}
-        for chave, rotulo in pep_import.NOTAS.items()
+        for chave, rotulo in {**pep_import.NOTAS, **pep_import.NOTAS_PEC}.items()
     })
     return {
         "type": "object",

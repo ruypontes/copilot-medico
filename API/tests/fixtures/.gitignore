@@ -1,0 +1,2 @@
+# O API/.gitignore ignora *.json; os casos de exemplo do eval sao fixtures versionadas.
+!*.json

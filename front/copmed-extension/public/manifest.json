@@ -8,15 +8,18 @@
     "background": {
         "service_worker": "background.js"
     },
+    "minimum_chrome_version": "116",
     "permissions": [
         "scripting",
         "activeTab",
-        "storage"
-   
+        "storage",
+        "offscreen"
     ],
-    "host_permissions": [ 
-        "http://localhost:3001/*" 
-    
+    "host_permissions": [
+        "http://localhost:3001/*",
+        "https://*.amplimed.com.br/*",
+        "http://localhost:8081/*",
+        "http://127.0.0.1:8081/*"
     ],
     "icons": {
         "32": "copilot-icon.png",
@@ -25,9 +28,13 @@
     },
     "content_scripts": [
         {
-        "matches": ["<all_urls>"],
-        "js": ["content.js"],
-        "all_frames": true
+            "matches": [
+                "https://*.amplimed.com.br/*",
+                "http://localhost:8081/*",
+                "http://127.0.0.1:8081/*"
+            ],
+            "js": ["content.js"],
+            "all_frames": true
         }
     ]
 }

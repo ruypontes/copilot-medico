@@ -28,6 +28,12 @@ _PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+# Sem isto o server sobe com o Gemini audio (padrao do B31) e, com um API/.env
+# local preenchido, as rotas de transcricao chamariam o Google de verdade; os
+# testes injetam o provedor. Fica fora das fixtures porque `backend.config`
+# e importado ja na coleta (antes de qualquer monkeypatch).
+os.environ["TRANSCRIPTION_PROVIDER"] = "vosk"
+
 
 # ---------------------------------------------------------------------------
 # Stubs dos modulos pesados (audio / IA)
@@ -110,14 +116,20 @@ def _make_stub_text_filter() -> types.ModuleType:
     return mod
 
 
-def _make_stub_gemini_connection() -> types.ModuleType:
-    """Substitui `backend.gemini_connection` para nao chamar a API do Google."""
-    mod = types.ModuleType("backend.gemini_connection")
+def _make_stub_chat_ia() -> types.ModuleType:
+    """Substitui `backend.llm.chat` para nao chamar a API do Google."""
+    mod = types.ModuleType("backend.llm.chat")
 
     def send_message(patient_id: str, consultation_id: str, message_text: str) -> str:
         return f"[stubbed AI reply] {message_text}"
 
+    def gerar_resposta_unica(instrucao: str, conteudo: str, response_schema=None) -> str:
+        # Recomendacoes (B38) e SOAP (B40): resposta vazia por padrao; os
+        # testes que dependem do conteudo trocam isto.
+        return '{"itens": []}'
+
     mod.send_message = send_message
+    mod.gerar_resposta_unica = gerar_resposta_unica
     return mod
 
 
@@ -143,7 +155,7 @@ _HEAVY_STUBS = {
     "speech_recognition": _make_stub_speech_recognition,
     "backend.audio_service": _make_stub_audio_service,
     "backend.text_filter": _make_stub_text_filter,
-    "backend.gemini_connection": _make_stub_gemini_connection,
+    "backend.llm.chat": _make_stub_chat_ia,
     "backend.pdf_reader": _make_stub_pdf_reader,
 }
 
@@ -167,6 +179,7 @@ def stub_heavy_modules():
     # ImportError: parent 'backend' not in sys.modules - um bug que so aparecia
     # ao rodar um arquivo de teste isolado.
     importlib.import_module("backend")
+    importlib.import_module("backend.llm")
 
     originals = {name: sys.modules.get(name) for name in _HEAVY_STUBS}
     originals.update({name: sys.modules.get(name) for name in _VOZ_MODULES})

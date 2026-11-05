@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createConsultation, getPatientConsultations } from "../../services/api";
 import { botMessage, getErrorMessage, type ConsultationListItem } from "../shared/types";
 import type { SelectionParams } from "../patients/usePatients";
@@ -22,38 +22,47 @@ export function useConsultations({
     string[]
   >([]);
   const [showImportHistoryModal, setShowImportHistoryModal] = useState(false);
+  // Valores do render mais recente, para conferir a resposta de uma busca que já estava em voo.
+  const consultationIdRef = useRef(consultationId);
+  consultationIdRef.current = consultationId;
+  const requestedPatientRef = useRef<string | null>(null);
 
   const fetchPatientConsultations = useCallback(
     async (pId: string) => {
+      requestedPatientRef.current = pId;
       setIsLoading(true);
+      // Uma falha NÃO vira item da lista: o item teria um id inventado, seria selecionável e a
+      // gravação/chat seguiriam para uma consulta que não existe (404 no backend).
+      const fail = (message: string) => {
+        if (requestedPatientRef.current !== pId) return;
+        setPatientConsultations([]);
+        setMessages((prev) => [...prev, botMessage(message)]);
+      };
       try {
         const data = await getPatientConsultations(pId);
+        if (requestedPatientRef.current !== pId) return; // o paciente mudou enquanto carregava
         if (data.status === "success") {
-          setPatientConsultations(data.consultations.sort(byMostRecent));
+          const consultations: ConsultationListItem[] = data.consultations.sort(byMostRecent);
+          setPatientConsultations(consultations);
+          // Consulta guardada que não é deste paciente (ou não existe mais): desfaz a seleção.
+          const selected = consultationIdRef.current;
+          if (selected && !consultations.some((consultation) => consultation.id === selected)) {
+            chrome.storage.local.remove(["consultationId", "consultationTitle"]);
+            setConsultationId(null);
+            setConsultationTitle(null);
+          }
         } else {
           console.error("Erro ao carregar consultas:", data.message);
-          setPatientConsultations([
-            {
-              id: Date.now().toString(),
-              title: `Erro ao carregar consultas: ${data.message}`,
-              date: new Date().toISOString(),
-            },
-          ]);
+          fail(`Erro ao carregar consultas: ${data.message}`);
         }
       } catch (error: unknown) {
         console.error("Erro na requisição de consultas:", error);
-        setPatientConsultations([
-          {
-            id: Date.now().toString(),
-            title: `Erro de rede ao carregar consultas: ${getErrorMessage(error, "Erro desconhecido")}`,
-            date: new Date().toISOString(),
-          },
-        ]);
+        fail(`Erro ao carregar consultas: ${getErrorMessage(error, "Erro desconhecido")}`);
       } finally {
         setIsLoading(false);
       }
     },
-    [setIsLoading]
+    [setIsLoading, setMessages, setConsultationId, setConsultationTitle]
   );
 
   // Carrega o histórico da consulta quando patientId ou consultationId mudam
@@ -72,6 +81,10 @@ export function useConsultations({
     } else {
       setPatientConsultations([]);
     }
+    // Ao trocar de paciente (ou fechar), a resposta que ainda estiver em voo é ignorada.
+    return () => {
+      requestedPatientRef.current = null;
+    };
   }, [patientId, fetchPatientConsultations]);
 
   // --- Handlers de Ação ---

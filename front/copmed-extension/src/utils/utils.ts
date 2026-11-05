@@ -43,7 +43,7 @@ export const executeScriptOnActiveTab = async (selector: string, index: number =
                 chrome.scripting.executeScript(
                     {
                         target: { tabId: tabId },
-                        function: extractTextFromElement,
+                        func: extractTextFromElement,
                         args: [selector, index],      
                     } as unknown as chrome.scripting.ScriptInjection<[string, number], string | null>, // Type assertion mantido
                     (injectionResults) => {
@@ -87,7 +87,7 @@ export async function executeArbitraryScriptOnActiveTab<T, Args extends unknown[
         const injectionResults = await chrome.scripting.executeScript(
             {
                 target: { tabId: tab.id },
-                function: func, 
+                func,
                 args: args,    
             } as unknown as chrome.scripting.ScriptInjection<Args, T>, // Type assertion mantido
         );

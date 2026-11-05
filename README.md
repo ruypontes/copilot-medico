@@ -58,7 +58,7 @@ cp API/.env.example API/.env
 
 Preencha em `API/.env` no mínimo `GEMINI_API_KEY`, `AUTH_SECRET_KEY` e
 `AUTH_BOOTSTRAP_EMAIL` / `AUTH_BOOTSTRAP_PASSWORD`. Sem `AUTH_SECRET_KEY` toda
-rota autenticada responde 500; sem `AUTH_BOOTSTRAP_*` nenhum administrador é
+rota autenticada responde 401; sem `AUTH_BOOTSTRAP_*` nenhum administrador é
 criado e ninguém consegue entrar (D‑22/D‑23). O arquivo está no `.gitignore`.
 
 ```bash
@@ -79,10 +79,19 @@ Sobe três serviços:
 > `API/repositories/`). O backend aplica as migrações sozinho ao iniciar
 > (`alembic upgrade head`).
 >
-> **Dados antigos:** o que estava em `patients_db.json` / `users_db.json`
-> **não aparece** até o B21 copiar esses arquivos para o banco. Eles continuam
-> no volume `backend_data`, intactos. Até lá, o admin inicial é recriado a
-> partir de `AUTH_BOOTSTRAP_*` no `API/.env`.
+> **Dados antigos (`patients_db.json` / `users_db.json`):** a aplicação não
+> lê mais esses arquivos. Para trazê-los para o banco, rode a migração do B21
+> uma vez (os arquivos ficam no volume `backend_data`, intactos):
+>
+> ```bash
+> docker compose exec backend python scripts/migrate_json_db.py --dry-run
+> docker compose exec backend python scripts/migrate_json_db.py
+> ```
+>
+> O script preserva IDs e senhas (os usuários entram com a mesma senha), pode
+> ser rodado de novo sem duplicar nada, descarta o paciente de demonstração
+> `paciente_abc` (P11) e só grava se a conferência final bater o JSON com o
+> banco. Fora do Docker: `cd API && python scripts/migrate_json_db.py`.
 
 ### Extensão Chrome
 
@@ -95,8 +104,10 @@ cd front/copmed-extension && npm install && npm run build
 ```
 
 Em `chrome://extensions`, ative o **Modo desenvolvedor**, clique em **Carregar
-sem compactação** e selecione `front/copmed-extension/dist`. Para gravar áudio,
-libere o Microfone nas permissões da extensão.
+sem compactação** e selecione `front/copmed-extension/dist`. No primeiro
+**Iniciar gravação** a extensão abre uma aba pedindo a permissão do microfone
+(o Chrome não mostra esse pedido dentro do popup); depois de autorizar, a
+gravação segue mesmo com o popup fechado e o áudio sobe em partes de até 5 min.
 
 ### Rodando sem Docker
 

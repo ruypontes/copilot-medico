@@ -1,9 +1,10 @@
 import { Dispatch, SetStateAction, useCallback, useState } from "react";
 import { executeArbitraryScriptOnActiveTab } from "../../utils/utils";
+import { extractAmplimedData } from "../../pep/amplimed";
 import {
   getConsultationHistory,
   sendChatMessage,
-  sendExtractedData,
+  sendPepImport,
   uploadPdf,
 } from "../../services/api";
 import {
@@ -154,7 +155,7 @@ export function useConsultationChat({
   );
 
   const handleSendExtractedDataToServer = useCallback(
-    async (extractedData: Record<string, string | string[]>) => {
+    async (extractedData: Record<string, string>) => {
       if (!patientId || !consultationId) {
         setMessages((prev) => [
           ...prev,
@@ -167,10 +168,9 @@ export function useConsultationChat({
       setMessages((prev) => [...prev, botMessage("Enviando dados extraídos para análise...")]);
 
       try {
-        const data = await sendExtractedData({
-          patient_id: patientId,
-          consultation_id: consultationId,
-          extracted_data: extractedData,
+        const data = await sendPepImport(consultationId, {
+          pep_origem: "amplimed",
+          campos: extractedData,
         });
         if (data.status === "success") {
           if (patientId && consultationId) {
@@ -210,35 +210,9 @@ export function useConsultationChat({
     setIsLoading(true);
 
     try {
-      const editableNotesSelector = ".editable-notes";
-      const createInputsSelector = ".create-input";
+      const extractedContent = await executeArbitraryScriptOnActiveTab(extractAmplimedData);
 
-      const extractedContent = await executeArbitraryScriptOnActiveTab(
-        (notesSel: string, inputsSel: string) => {
-          const extractText = (selector: string) => {
-            const element = document.querySelector(selector);
-            return element ? element.textContent?.trim() || "" : "";
-          };
-
-          const extractInputs = (selector: string) => {
-            const elements = Array.from(
-              document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(selector)
-            );
-            return elements.map(
-              (el) => `${el.name || el.id || el.placeholder || "Campo"}: ${el.value || ""}`
-            );
-          };
-
-          const editableNotes = extractText(notesSel);
-          const createInputs = extractInputs(inputsSel);
-
-          return { editableNotes, createInputs };
-        },
-        editableNotesSelector,
-        createInputsSelector
-      );
-
-      if (extractedContent) {
+      if (extractedContent && Object.keys(extractedContent).length > 0) {
         await handleSendExtractedDataToServer(extractedContent);
       } else {
         setMessages((prev) => [...prev, botMessage("Nenhum conteúdo relevante extraído da página.")]);

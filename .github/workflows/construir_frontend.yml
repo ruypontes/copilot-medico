@@ -49,7 +49,8 @@ jobs:
         run: npx tsc -b
 
       - name: Build (vite)
-        run: npx vite build
+        # Popup/offscreen e, a parte, o content script em IIFE (B52)
+        run: npx vite build && npm run build:content
 
       - name: Compactar a pasta dist
         run: zip -r extension-dist.zip ./dist

@@ -1,8 +1,11 @@
 # Subconjunto de requirements.txt suficiente para importar server.py com os
 # stubs de teste ativos. Mantenha as versoes em sincronia com requirements.txt.
 Flask==3.0.3
+PyJWT==2.9.0
 Flask-Cors
 pydantic-settings
+# SoapV1 (B39) usa pydantic diretamente.
+pydantic>=2,<3
 # Cifra do B26; os testes de ida e volta dependem dela.
 cryptography>=42,<47
 python-dotenv

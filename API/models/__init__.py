@@ -10,6 +10,7 @@ from .consulta import (
     DocumentoSoap,
     MapaAnonimizacaoConsulta,
     Mensagem,
+    ParteAudio,
 )
 from .enums import OrigemPep, PapelMensagem, StatusAprovacao, StatusSoap, TipoConsentimento
 from .medico import Medico
@@ -30,6 +31,7 @@ __all__ = [
     "OrigemPep",
     "Paciente",
     "PapelMensagem",
+    "ParteAudio",
     "Pseudonimo",
     "StatusAprovacao",
     "StatusSoap",

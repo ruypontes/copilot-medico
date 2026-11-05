@@ -1,9 +1,12 @@
 Flask==3.0.3
-google-generativeai
+PyJWT==2.9.0
+google-genai>=1.0
 spacy
 PyPDF2
 Flask-Cors
 pydantic-settings
+# SoapV1 (B39) usa pydantic diretamente.
+pydantic>=2,<3
 # Cifra do mapa de pseudonimos (B26 / ADR-03): AES-GCM.
 cryptography>=42,<47
 python-dotenv

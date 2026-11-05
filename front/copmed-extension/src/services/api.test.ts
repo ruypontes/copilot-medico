@@ -8,6 +8,7 @@ import {
   getStoredSession,
   login,
   publishApiUrl,
+  sendPepImport,
   setSessionExpiredHandler,
   setSessionRefresher,
   storeSession,
@@ -160,6 +161,23 @@ describe("apiRequest: envio do token", () => {
     await apiRequest("/api/qualquer", { auth: false });
 
     expect(bearerOf(0)).toBeUndefined();
+  });
+
+  it("envia importacao PEP para a rota canonica com o payload tipado", async () => {
+    await storeSession(sessionOf("tok-1"));
+    fetchMock.mockResolvedValueOnce(json(200, { status: "success" }));
+    const payload = {
+      pep_origem: "amplimed",
+      source_url: "https://pep.example/consulta",
+      campos: { peso: "70", anamnese: "Queixa sintetica." },
+    };
+
+    await sendPepImport("consulta/1", payload);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${API_URL}/api/consultations/consulta%2F1/pep-import`);
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual(payload);
+    expect(bearerOf(0)).toBe("Bearer tok-1");
   });
 });
 
