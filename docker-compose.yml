@@ -1,6 +1,6 @@
 # CoPilot Medico - ambiente de desenvolvimento completo (B12)
 #
-#   cp API/.env.example API/.env   # preencha GEMINI_API_KEY e AUTH_*
+#   cp API/.env.example API/.env   # preencha ANTHROPIC_API_KEY (ou GEMINI_API_KEY) e AUTH_*
 #   docker compose up -d --build
 #
 # Servicos expostos no host:

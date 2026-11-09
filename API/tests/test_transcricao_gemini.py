@@ -73,7 +73,7 @@ def _duracao(caminho):
 
 # ---------- escolha do provedor pelo .env ----------
 
-def test_padrao_e_gemini_com_a_chave_do_chat():
+def test_sem_chave_da_groq_o_padrao_e_o_gemini():
     provedor = obter_provedor(_config(gemini_api_key="chave"))
     assert isinstance(provedor, GeminiAudioProvider)
     assert isinstance(provedor, TranscriptionProvider)

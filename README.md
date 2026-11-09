@@ -56,7 +56,8 @@ Não é preciso ter Python instalado — a imagem do backend já usa Python 3.11
 cp API/.env.example API/.env
 ```
 
-Preencha em `API/.env` no mínimo `GEMINI_API_KEY`, `AUTH_SECRET_KEY` e
+Preencha em `API/.env` no mínimo `ANTHROPIC_API_KEY` (Claude, o modelo padrão; o
+`GEMINI_API_KEY` é a reserva e a transcrição de áudio), `AUTH_SECRET_KEY` e
 `AUTH_BOOTSTRAP_EMAIL` / `AUTH_BOOTSTRAP_PASSWORD`. Sem `AUTH_SECRET_KEY` toda
 rota autenticada responde 401; sem `AUTH_BOOTSTRAP_*` nenhum administrador é
 criado e ninguém consegue entrar (D‑22/D‑23). O arquivo está no `.gitignore`.
