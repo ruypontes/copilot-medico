@@ -4,7 +4,7 @@ Auditoria feita em 15/09/2026 sobre o clone do repositório `Jamuelton/copilot_m
 
 ## Situação em 09/11/2026
 
-Revisão dos achados contra a `develop` (até o PR #120). As seções seguintes ficam como registro do diagnóstico original.
+Revisão dos achados feita pelo Grupo 5 (2026.2, v5.0) contra a `develop` (até o PR #120). As seções seguintes ficam como registro do diagnóstico original.
 
 | ID | Achado | Situação | Onde |
 |---|---|---|---|
