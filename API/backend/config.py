@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     app_title: str = "Copilot M\u00e9dico"
     gemini_api_key: str = ""
 
+    # Modelo de linguagem do chat, do SOAP e das sugestoes. Claude e o padrao;
+    # o Gemini (GEMINI_API_KEY) fica de reserva. LLM_PROVIDER=gemini inverte.
+    llm_provider: str = "claude"
+    anthropic_api_key: str = ""
+    claude_model: str = "claude-opus-5-5"
+    claude_effort: str = "medium"
+
     auth_secret_key: str = ""
     auth_token_expiration_minutes: int = 15
     # Bancos JSON antigos (pre-B20). A aplicacao nao os le mais; ficam

@@ -1,5 +1,7 @@
 Flask==3.0.3
 PyJWT==2.9.0
+# Claude (padrao do chat/SOAP) e Gemini (reserva e transcricao de audio).
+anthropic>=2.7,<3
 google-genai>=1.0
 spacy
 PyPDF2
