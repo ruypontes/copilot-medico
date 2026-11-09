@@ -61,9 +61,15 @@ def groq_falsa(monkeypatch):
 
 # ---------- escolha do provedor pelo .env ----------
 
-def test_sem_variavel_usa_o_gemini_e_nao_o_whisper():
-    """O padrao e o Gemini audio (B31); o Whisper so entra com a flag."""
+def test_sem_variavel_o_padrao_e_o_whisper():
+    """Com a chave da Groq, o Whisper e o padrao, mesmo com a do Gemini."""
     provedor = obter_provedor(_config(gemini_api_key="g", groq_api_key="gsk_teste"))
+    assert isinstance(provedor, WhisperGroqProvider)
+
+
+def test_gemini_explicito_ignora_a_groq():
+    provedor = obter_provedor(_config(transcription_provider="gemini", gemini_api_key="g",
+                                      groq_api_key="gsk_teste"))
     assert isinstance(provedor, GeminiAudioProvider)
 
 
@@ -85,7 +91,7 @@ def test_whisper_sem_nenhuma_chave_fica_no_diarizador():
 
 def test_provedor_desconhecido_volta_ao_padrao():
     provedor = obter_provedor(_config(transcription_provider="xyz", groq_api_key="k", gemini_api_key="g"))
-    assert isinstance(provedor, GeminiAudioProvider)
+    assert isinstance(provedor, WhisperGroqProvider)
 
 
 def test_mesmo_contrato_que_o_gemini():

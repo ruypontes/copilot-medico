@@ -4,9 +4,10 @@ Mesmo contrato do GeminiProvider (provider.py). O historico da consulta vem
 do banco a cada mensagem e vai inteiro para a API, que nao guarda estado; o
 cache de prompt (cache_control) evita pagar de novo pelo prefixo repetido.
 
-- Recusa de seguranca (stop_reason "refusal"): o proprio servidor da
-  Anthropic refaz o pedido em outro modelo Claude (fallbacks "default"). Se
-  ainda assim recusar, vira LlmError e o provedor de reserva (Gemini) tenta.
+- Recusa de seguranca (stop_reason "refusal"): nos modelos que aceitam, o
+  proprio servidor da Anthropic refaz o pedido em outro modelo Claude
+  (fallbacks "default"); o Haiku 5.5 nao tem esse recurso. Se a recusa ficar,
+  vira LlmError e o provedor de reserva (Gemini) tenta.
 - Saida em JSON com schema (SOAP do B40): structured outputs. O schema do
   SoapV1 foi escrito no subconjunto do Gemini; aqui os objetos ganham
   `additionalProperties: false`, que a API exige. Se ainda assim a API
@@ -21,10 +22,17 @@ import threading
 from .gemini import INSTRUCAO_CHAT, _conversa
 from .provider import LlmError, LlmProvider
 
-MODELO_PADRAO = "claude-opus-5-5"
-ESFORCO_PADRAO = "medium"
+# Haiku 5.5: rapido e barato para o volume do chat; esforco alto compensa
+# no SOAP. Os dois mudam pelo .env (CLAUDE_MODEL, CLAUDE_EFFORT).
+MODELO_PADRAO = "claude-haiku-5-5"
+ESFORCO_PADRAO = "high"
+# Cobre o pensamento adaptativo (ligado por padrao) mais a resposta.
 MAX_TOKENS = 16000
 BETA_FALLBACK = "server-side-fallback-2026-07-01"
+# So estes modelos aceitam o fallback de recusa no servidor.
+MODELOS_COM_FALLBACK = frozenset({
+    "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-1", "claude-fable-5-2",
+})
 
 # O banco grava as mensagens no formato do Gemini ("model"); a API usa "assistant".
 PAPEIS = {"user": "user", "model": "assistant", "assistant": "assistant"}
@@ -98,9 +106,10 @@ class ClaudeProvider(LlmProvider):
             "max_tokens": MAX_TOKENS,
             "messages": mensagens,
             "output_config": output_config,
-            "betas": [BETA_FALLBACK],
-            "fallbacks": "default",
         }
+        if self.modelo in MODELOS_COM_FALLBACK:
+            parametros["betas"] = [BETA_FALLBACK]
+            parametros["fallbacks"] = "default"
         if sistema:
             parametros["system"] = sistema
         if cache:

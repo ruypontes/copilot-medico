@@ -100,7 +100,7 @@ def test_sem_nenhuma_chave():
 
 def test_padroes_do_claude():
     p = ClaudeProvider(api_key="a", instrucao="x")
-    assert (p.modelo, p.esforco) == ("claude-opus-5-5", "medium")
+    assert (p.modelo, p.esforco) == ("claude-haiku-5-5", "high")
 
 
 # ---------- chat ----------
@@ -122,11 +122,20 @@ def test_chat_envia_historico_instrucao_e_fallback_de_recusa():
         {"role": "user", "content": "Três dias."},  # sem duplicar a pergunta atual
     ]
     assert pedido["system"] == "Instrução do chat."
-    assert pedido["model"] == "claude-opus-5-5"
-    assert pedido["output_config"] == {"effort": "medium"}
+    assert pedido["model"] == "claude-haiku-5-5"
+    assert pedido["output_config"] == {"effort": "high"}
     assert pedido["cache_control"] == {"type": "ephemeral"}
-    assert pedido["betas"] == [BETA_FALLBACK] and pedido["fallbacks"] == "default"
-    assert "thinking" not in pedido  # Opus 5.5: pensamento adaptativo, sempre ligado
+    # Haiku 5.5: sem fallback de recusa no servidor (o Gemini e a reserva)
+    assert "betas" not in pedido and "fallbacks" not in pedido
+    assert "thinking" not in pedido  # pensamento adaptativo, ligado por padrao
+
+
+@pytest.mark.parametrize("modelo", ["claude-opus-5-5", "claude-sonnet-5-5"])
+def test_modelos_com_fallback_de_recusa_no_servidor(modelo):
+    claude, cliente = _claude(modelo=modelo)
+    claude.gerar("x")
+    assert cliente.pedidos[0]["betas"] == [BETA_FALLBACK]
+    assert cliente.pedidos[0]["fallbacks"] == "default"
 
 
 def test_chat_que_comeca_pela_ia_e_mensagem_vazia():
