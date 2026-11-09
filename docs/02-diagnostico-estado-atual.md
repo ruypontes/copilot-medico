@@ -2,9 +2,9 @@
 
 Auditoria feita em 15/09/2026 sobre o clone do repositório `Jamuelton/copilot_medico_grupo_6_es` (branch `develop`, último commit 01/12/2025) e sobre a extensão privada v2.3. Cada achado tem um ID (`D‑nn`) referenciado no backlog.
 
-## Situação em 09/11/2026
+## Atualização de 09/11/2026 — o que o Grupo 5 (2026.2, v5.0) mudou
 
-Revisão dos achados feita pelo Grupo 5 (2026.2, v5.0) contra a `develop` (até o PR #120). As seções seguintes ficam como registro do diagnóstico original.
+Situação dos achados D‑01…D‑34 na `develop` (até o PR #120). As seções seguintes ficam como registro do diagnóstico original e da atualização de 20/09.
 
 | ID | Achado | Situação | Onde |
 |---|---|---|---|

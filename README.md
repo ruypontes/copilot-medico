@@ -197,7 +197,7 @@ cd API && alembic revision --autogenerate -m "descricao" && alembic check
 ```
 
 **Limitações conhecidas nesta versão** (situação completa em
-[docs/02](docs/02-diagnostico-estado-atual.md#situação-em-09112026)):
+[docs/02](docs/02-diagnostico-estado-atual.md#atualização-de-09112026--o-que-o-grupo-5-20262-v50-mudou)):
 
 - o SOAP é inserido só no e-SUS PEC; a escrita no Amplimed ainda não existe (B49);
 - a extensão ainda não tem a tela de editar e aprovar o SOAP (B43);
