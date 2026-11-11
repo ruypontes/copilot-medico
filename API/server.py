@@ -8,6 +8,7 @@ import speech_recognition as sr
 
 # Assuming these imports are correct and available
 from backend import audio_chunks
+from backend.soap import cid10
 from backend.llm import chat as chat_ia
 from backend import limpeza_audio
 from backend import pdf_reader
@@ -80,6 +81,8 @@ def get_cors_origins():
 
 
 app = Flask(__name__)
+# Le a tabela CID-10 embarcada ja na subida (B42): a primeira busca nao espera.
+cid10.preload()
 # Teto de qualquer requisicao: sem ele um PDF ou audio era gravado inteiro
 # antes de qualquer checagem. 1 MB de folga sobre a maior parte de audio
 # aceita (B30), para o envelope do multipart.
@@ -398,6 +401,32 @@ def health_check():
         "diarizer_loaded": audio_processor is not None,
         "transcription_provider": getattr(transcription_provider, "nome", None),
     }), 200
+
+
+@app.route('/api/cid10', methods=['GET'])
+@roles_required("administrador", "medico")
+def search_cid10_api():
+    """Busca na CID-10 embarcada (B42 / US018): ?q=<codigo ou texto>&limit=1..100.
+
+    Usada pelo campo CID-10 das hipoteses no SoapEditor (B43). A tabela fica
+    em memoria (backend/soap/cid10.py); nada sai do servidor.
+    """
+    query = request.args.get("q", "").strip()
+    if not query:
+        return _json_error("O parametro q e obrigatorio.", 400)
+    try:
+        limit = int(request.args.get("limit", "20"))
+    except ValueError:
+        return _json_error("O parametro limit deve ser um numero inteiro.", 400)
+    if not 1 <= limit <= 100:
+        return _json_error("O parametro limit deve estar entre 1 e 100.", 400)
+
+    try:
+        results = cid10.search(query, limit=limit)
+    except OSError:
+        return _json_error("Nao foi possivel carregar a tabela CID-10.", 500)
+
+    return jsonify({"status": "success", "query": query, "count": len(results), "results": results}), 200
 
 
 @app.route('/api/auth/login', methods=['POST'])
