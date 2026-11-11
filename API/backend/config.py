@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     app_title: str = "Copilot M\u00e9dico"
     gemini_api_key: str = ""
 
+    # Modelo de linguagem do chat, do SOAP e das sugestoes. Claude e o padrao;
+    # o Gemini (GEMINI_API_KEY) fica de reserva. LLM_PROVIDER=gemini inverte.
+    llm_provider: str = "claude"
+    anthropic_api_key: str = ""
+    claude_model: str = "claude-haiku-5-5"
+    claude_effort: str = "high"
+
     auth_secret_key: str = ""
     auth_token_expiration_minutes: int = 15
     # Bancos JSON antigos (pre-B20). A aplicacao nao os le mais; ficam
@@ -47,9 +54,9 @@ class Settings(BaseSettings):
     # Job que apaga o audio que sobrou (B35); 0 desliga.
     audio_cleanup_interval_hours: float = 24
 
-    # Provedor de transcricao (ADR-04). Vazio ou "gemini" usa o Gemini audio
-    # com a mesma GEMINI_API_KEY (B31); "whisper" usa o Whisper via Groq e
-    # exige groq_api_key (B32); "vosk" mantem o Diarizador local.
+    # Provedor de transcricao (ADR-04). Vazio ou "whisper" usa o Whisper via
+    # Groq com groq_api_key (padrao); sem essa chave, o Gemini audio (B31).
+    # "gemini" forca o Gemini audio; "vosk" mantem so o Diarizador local.
     transcription_provider: str = ""
     gemini_audio_model: str = "gemini-2.5-flash"
     groq_api_key: str = ""

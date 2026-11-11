@@ -167,9 +167,12 @@ erDiagram
 | POST | `/api/consultations/<id>/audio/chunks` | multipart `audio_file` (wav ≤ 5 min), `recording_id`, `seq` | 202 `{seq, duration, replaced, received[]}`; reenviar a mesma `seq` substitui a parte |
 | POST | `/api/consultations/<id>/transcribe` | `recording_id`, `total_chunks?`, provedor? | transcrição com turnos + `chunks {received, missing, failed}`; apaga o áudio das partes |
 | POST | `/api/recommendations` (B38; mantida a rota existente, US020-CA001) | patient_id, consultation_id, janela_min? (1–120, padrão 5) | itens[] {tipo, texto} (≤ 5, ≤ 20 palavras), janela_min, transcricoes_usadas |
+| GET | `/api/cid10?q=&limit=` (B42) | q (início do código ou palavras da descrição), limit 1–100 (padrão 20) | `results[] {code, description}` da tabela CID-10 embarcada (DATASUS), código exato e prefixo primeiro; < 100 ms |
 | POST | `/api/consultations/<id>/soap` (B40) | — | 201 com o SOAP gerado (versao_ia, reidratado), `tentativas`; 400 sem material; 502 com `errors` se inválido após 1 retry; 429 se a cota da IA esgotar |
 | GET | `/api/consultations/<id>/soap` (B44) | — | SOAP mais recente: `versao_ia`, `versao_medico`, `atual` e `diff` por seção (null sem edição) |
-| PUT | `/api/consultations/<id>/soap/<sid>` | versao_medico (SoapV1; B44), status (aprovação, B43) | SOAP com `diff`; 400 com `errors` por campo; 409 se aprovado |
+| PUT | `/api/consultations/<id>/soap/<sid>` | versao_medico (SoapV1; B44) | SOAP com `diff`; 400 com `errors` por campo; 409 se aprovado |
+| POST | `/api/consultations/<id>/soap/<sid>/approve` (B53; botão Aprovar do B43) | — | SOAP `aprovado`; 409 se já inserido no PEP |
+| POST | `/api/consultations/<id>/soap/<sid>/inserted` (B53) | pep (`amplimed` \| `esus-pec`) | SOAP `inserido_no_pep`; 409 se não aprovado ou já inserido |
 | GET | `/api/consultations/<id>/export?format=` | pdf \| md | arquivo |
 | GET | `/api/health` | — | versão, provedores ativos (**sem chaves**) |
 
@@ -205,9 +208,10 @@ sequenceDiagram
     A->>A: validar (pydantic) · reidratar
     A-->>E: SOAP versao_ia
     D->>E: Edita, aprova
-    E->>A: PUT soap (versao_medico, aprovado)
+    E->>A: PUT soap (versao_medico) · POST approve
     D->>E: Inserir no prontuário
     E->>P: adapter.writeEvolution(formatSoapForPep(soap, 'amplimed'))
+    E->>A: POST soap/<sid>/inserted (status inserido_no_pep)
 ```
 
 ## 6. Decisões de arquitetura (ADRs)

@@ -3,6 +3,8 @@ import json
 import sys
 from pathlib import Path
 
+from backend.llm import LlmError
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import avaliar_soap  # noqa: E402
 
@@ -70,10 +72,8 @@ def test_nomes_plantados_nao_chegam_ao_modelo(tmp_path):
 
 
 def test_cota_esgotada_espera_e_tenta_de_novo(tmp_path):
-    class ResourceExhausted(Exception):
-        pass
-
-    codigo, relatorio = _rodar(tmp_path, _modelo(ResourceExhausted("quota")), "--casos", "caso-01")
+    erro = LlmError("429 RESOURCE_EXHAUSTED", cota_esgotada=True)
+    codigo, relatorio = _rodar(tmp_path, _modelo(erro), "--casos", "caso-01")
 
     assert codigo == 0 and relatorio["resultados"][0]["valido"] is True
 

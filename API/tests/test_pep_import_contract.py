@@ -246,7 +246,7 @@ def test_extensao_tipada_invalida_400(auth_client, consulta):
 
 # --------------------------------------------------------------------------- OpenAPI
 
-def test_openapi_e_publico_e_documenta_rotas_de_pep_e_cid10(client):
+def test_openapi_e_publico_e_documenta_as_rotas_do_pep_e_da_cid10(client):
     resp = client.get("/api/openapi.json")
     spec = resp.get_json()
     assert resp.status_code == 200
@@ -266,10 +266,8 @@ def test_toda_rota_documentada_existe_no_flask(flask_app):
 
 
 def test_toda_rota_pep_documentada_e_toda_rota_de_extensao_esta_no_spec(flask_app):
-    documentadas = {
-        caminho for caminho in build_openapi_spec()["paths"]
-        if "pep-import" in caminho or "extracted-data" in caminho
-    }
+    documentadas = {caminho for caminho in build_openapi_spec()["paths"]
+                    if "pep-import" in caminho or "extracted-data" in caminho}
     reais = {r.rule.replace("<consultation_id>", "{consultation_id}")
              for r in flask_app.url_map.iter_rules()
              if "pep-import" in r.rule or "extracted-data" in r.rule}

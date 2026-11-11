@@ -110,11 +110,12 @@ function api(method: string, path: string, body: Record<string, unknown>) {
         : [];
     return resposta(200, { status: "success", logs });
   }
-  if ((m = path.match(/^\/api\/consultations\/([^/]+)\/soap$/)) && method === "GET") {
-    return resposta(404, { message: "Ainda nao existe SOAP para esta consulta." });
+  // Editor SOAP (B43) abre com a consulta: ainda sem SOAP, e a busca CID-10 vazia.
+  if (/^\/api\/consultations\/[^/]+\/soap$/.test(path) && method === "GET") {
+    return resposta(404, { status: "error", message: "Nenhum SOAP gerado para esta consulta." });
   }
-  if (path === "/api/cid10") {
-    return resposta(200, { status: "success", results: [] });
+  if (path.startsWith("/api/cid10")) {
+    return resposta(200, { status: "success", query: "", count: 0, results: [] });
   }
   if ((m = path.match(/^\/api\/consultations\/([^/]+)\/pep-import$/)) && method === "POST") {
     const cid = decodeURIComponent(m[1]);

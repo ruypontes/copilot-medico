@@ -43,3 +43,8 @@ bin/
 include/
 lib/
 lib64/
+
+# Playwright (E2E, B56)
+/test-results/
+/playwright-report/
+/blob-report/

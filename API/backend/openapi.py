@@ -1,7 +1,8 @@
-"""Especificacao OpenAPI 3.1 das rotas de importacao do PEP (B07).
+"""Especificacao OpenAPI 3.1 das rotas de importacao do PEP (B07) e da busca CID-10 (B42).
 
-Servida em ``GET /api/openapi.json``. Por enquanto documenta so o contrato
-``pep-import`` e seus aliases; as demais rotas entram conforme a B16.
+Servida em ``GET /api/openapi.json``. Por enquanto documenta o contrato
+``pep-import`` com seus aliases e a busca ``/api/cid10``; as demais rotas
+entram conforme a B16.
 Enums e limites vem de ``backend.pep_import`` para nao divergir da validacao.
 """
 
@@ -30,7 +31,7 @@ def _campos_schema():
     properties.update({
         chave: {"type": "string", "maxLength": pep_import.MAX_NOTA_CHARS,
                 "description": f"Nota clinica: {rotulo}."}
-        for chave, rotulo in pep_import.NOTAS.items()
+        for chave, rotulo in {**pep_import.NOTAS, **pep_import.NOTAS_PEC}.items()
     })
     return {
         "type": "object",
@@ -68,13 +69,14 @@ def build_openapi_spec():
         "info": {
             "title": "CoPilot Medico API",
             "version": "5.0.0-dev",
-            "description": "Contratos de importacao do PEP e busca local da CID-10.",
+            "description": "Contratos de importacao do PEP (pep-import) e busca na CID-10 embarcada.",
         },
         "paths": {
             "/api/cid10": {
                 "get": {
                     "operationId": "searchCid10",
-                    "summary": "Busca códigos e descrições na CID-10 brasileira",
+                    "summary": "Busca codigos e descricoes na CID-10 embarcada (DATASUS)",
+                    "description": "Codigo casa pelo inicio (A00.0 = A000); texto, sem acento e em qualquer ordem.",
                     "security": security,
                     "parameters": [
                         {
@@ -82,7 +84,7 @@ def build_openapi_spec():
                             "in": "query",
                             "required": True,
                             "schema": {"type": "string", "minLength": 1},
-                            "description": "Trecho de um código ou de uma descrição.",
+                            "description": "Inicio de um codigo ou palavras da descricao.",
                         },
                         {
                             "name": "limit",
@@ -93,14 +95,14 @@ def build_openapi_spec():
                     ],
                     "responses": {
                         "200": {
-                            "description": "Resultados encontrados no catálogo local.",
+                            "description": "Itens da tabela, os mais proximos primeiro.",
                             "content": {"application/json": {
-                                "schema": {"$ref": "#/components/schemas/CID10BuscaResposta"},
+                                "schema": {"$ref": "#/components/schemas/Cid10BuscaResposta"},
                             }},
                         },
-                        "400": _error_response("Parâmetros de busca inválidos."),
-                        "401": _error_response("Token ausente ou inválido."),
-                        "403": _error_response("Perfil sem permissão."),
+                        "400": _error_response("Parametros de busca invalidos."),
+                        "401": _error_response("Token ausente ou invalido."),
+                        "403": _error_response("Perfil sem permissao."),
                     },
                 },
             },
@@ -168,7 +170,7 @@ def build_openapi_spec():
         "components": {
             "securitySchemes": {"bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}},
             "schemas": {
-                "CID10BuscaResposta": {
+                "Cid10BuscaResposta": {
                     "type": "object",
                     "required": ["status", "query", "count", "results"],
                     "properties": {
@@ -181,7 +183,7 @@ def build_openapi_spec():
                                 "type": "object",
                                 "required": ["code", "description"],
                                 "properties": {
-                                    "code": {"type": "string"},
+                                    "code": {"type": "string", "examples": ["A90", "J11.1"]},
                                     "description": {"type": "string"},
                                 },
                             },

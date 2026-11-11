@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import type { SoapV1 } from "../features/shared/types";
-import { AmplimedAdapter, extractAmplimedData, formatSoapForPep } from "./amplimed";
+import type { SoapVersion } from "../features/shared/types";
+import { AmplimedAdapter, amplimedAdapter, extractAmplimedData, formatSoapForPep } from "./amplimed";
+import { pepRegistry } from "./registry";
+import { criarPaginaPec } from "../test/esusPecPagina";
 import fixture from "../../tests/fixtures/pep/amplimed-consulta.html?raw";
 
-const soap: SoapV1 = {
+const soap: SoapVersion = {
   subjetivo: "Febre há três dias.",
   objetivo: "Temperatura de 37,8 °C.",
   avaliacao: "Quadro compatível com virose.",
@@ -79,5 +81,28 @@ describe("AmplimedAdapter", () => {
 
     expect(() => new AmplimedAdapter(document).writeEvolution("SOAP"))
       .toThrow("Campo de evolução do Amplimed não encontrado.");
+  });
+});
+
+describe("amplimedAdapter (B52)", () => {
+  it("detecta o prontuário do Amplimed e lê as notas pela mesma extração", () => {
+    document.body.innerHTML = fixture;
+    expect(amplimedAdapter.detect(document)).toBe(true);
+    expect(amplimedAdapter.readClinicalNotes(document)).toEqual(extractAmplimedData(document));
+    expect(pepRegistry.detect(document)?.id).toBe("amplimed");
+  });
+
+  it("não detecta página comum nem o e-SUS PEC", () => {
+    document.body.innerHTML = "<form><input name='senha'><textarea></textarea></form>";
+    expect(amplimedAdapter.detect(document)).toBe(false);
+    expect(amplimedAdapter.detect(criarPaginaPec())).toBe(false);
+  });
+
+  it("ainda não escreve a evolução (B49)", async () => {
+    document.body.innerHTML = fixture;
+    expect(await amplimedAdapter.writeEvolution("Subjetivo: x", document)).toEqual({
+      ok: false,
+      motivo: "campo_nao_encontrado",
+    });
   });
 });
