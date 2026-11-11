@@ -19,7 +19,7 @@ O resto é o sistema de verdade: popup, background, documento offscreen, content
 Limites de hoje:
 
 - Gerar, aprovar e inserir o SOAP ainda não têm tela no popup (SoapEditor, B43). O teste faz, de dentro do popup, a mesma sequência do botão "Inserir no prontuário" (`InsertIntoPepButton.tsx`). Quando o B43 entrar, esses passos viram cliques.
-- Só o e-SUS PEC: o Amplimed ainda não recebe o SOAP (B49).
+- Só o e-SUS PEC: a escrita no Amplimed (B49) existe, mas não há um Amplimed falso para o e2e; ela é coberta pelos testes de unidade e de contrato (`src/pep/amplimed*.test.ts`).
 
 ## Rodar na sua máquina (Ubuntu)
 
