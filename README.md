@@ -200,9 +200,13 @@ Ao mudar um modelo em `API/models/`, gere a migração e confira:
 cd API && alembic revision --autogenerate -m "descricao" && alembic check
 ```
 
-**Conhecido e quebrado nesta versão:** a extração do Amplimed usa dois conjuntos
-de seletores divergentes (D‑01); a diarização está em modo de teste (D‑03);
-médicos não veem os pacientes legados (D‑24).
+**Limitações conhecidas nesta versão** (situação completa em
+[docs/02](docs/02-diagnostico-estado-atual.md#atualização-de-09112026--o-que-o-grupo-5-20262-v50-mudou)):
+
+- o SOAP é inserido só no e-SUS PEC; a escrita no Amplimed ainda não existe (B49);
+- a extensão ainda não tem a tela de editar e aprovar o SOAP (B43);
+- não há registro de consentimento da gravação (B28);
+- o backend não roda em Python 3.13 ou superior (D‑05).
 
 ## Validação do README
 
@@ -257,9 +261,7 @@ pip install -r requirements.txt
 python -m spacy download pt_core_news_lg
 ```
 
-**Ainda pendentes:**
-1. Quem paga a chave Gemini durante o semestre e qual o limite mensal (P2).
-2. Se a trilha privada (Supabase/Vercel) fica congelada até M4 (P4).
-3. Médicos que participarão do piloto na Sprint 6 (P5).
-4. Cadastro de identificação do paciente opcional e cifrado (P7); exibir CID‑10 sugerido (P8); prontuário dos vídeos finais (P9).
-5. Destino do sistema gerenciador web do Grupo 2 (P10) e dos pacientes legados sem médico (P11).
+**Decididas em 15/10/2026:** as pendências P1 a P13 (chave da IA, piloto,
+identificação do paciente, CID‑10, sistema gerenciador web, pacientes legados e
+as demais) foram resolvidas pelo PO. Ver
+[docs/12 — Decisões do PO](docs/12-decisoes-po-2026-10-15.md).
