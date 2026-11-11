@@ -138,7 +138,10 @@ python scripts/download_models.py
 python server.py
 ```
 
-Servidor em `http://localhost:3001`.
+Servidor em `http://localhost:3001`, acessível só nesta máquina e sem modo
+debug. Para depurar localmente, suba com `FLASK_DEBUG=1 python server.py`; o
+modo debug permite executar código pelo navegador e nunca deve ser usado
+fora da sua máquina.
 
 Para criar ou verificar o administrador inicial sem subir o servidor (com
 `AUTH_BOOTSTRAP_EMAIL` e `AUTH_BOOTSTRAP_PASSWORD` configurados), a partir da

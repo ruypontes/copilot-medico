@@ -1,6 +1,9 @@
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1
+# Dentro do container o servidor escuta em todas as interfaces para a porta
+# publicada funcionar; quem limita o acesso ao host e o docker-compose.yml.
+ENV FLASK_RUN_HOST=0.0.0.0
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
