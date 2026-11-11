@@ -131,7 +131,8 @@ class PacienteRepository(Repositorio):
         paciente.dados_identificaveis = Pseudonimo(**self._dados_identificaveis(nome))
         self.sessao.add(paciente)
         self.sessao.commit()
-        return para_dicionario(paciente)
+        # Com o cofre: quem acabou de criar ve o nome, nao o pseudonimo.
+        return para_dicionario(paciente, self.cofre)
 
     def _dados_identificaveis(self, nome) -> dict:
         """Serializa o bloco identificavel, cifrado se houver cofre (B26).

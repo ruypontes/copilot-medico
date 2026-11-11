@@ -110,12 +110,6 @@ function api(method: string, path: string, body: Record<string, unknown>) {
         : [];
     return resposta(200, { status: "success", logs });
   }
-  if ((m = path.match(/^\/api\/consultations\/([^/]+)\/soap$/)) && method === "GET") {
-    return resposta(404, { message: "Ainda nao existe SOAP para esta consulta." });
-  }
-  if (path === "/api/cid10") {
-    return resposta(200, { status: "success", results: [] });
-  }
   if ((m = path.match(/^\/api\/consultations\/([^/]+)\/pep-import$/)) && method === "POST") {
     const cid = decodeURIComponent(m[1]);
     fake.historicos[cid] = [

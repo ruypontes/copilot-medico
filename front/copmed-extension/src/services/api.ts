@@ -1,3 +1,5 @@
+import type { SoapVersion } from "../features/shared/types";
+
 export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 const TOKEN_KEY = "copmed_extension_token";
@@ -274,49 +276,80 @@ export function sendPepImport(consultationId: string, payload: Record<string, un
   });
 }
 
+// SOAP da consulta com as versões IA/médico e o diff (B44). Resposta: { soap: SoapDocument }.
+export function getSoap(consultationId: string) {
+  return apiRequest(`/api/consultations/${encodeURIComponent(consultationId)}/soap`);
+}
+
+// Versão do médico no SoapV1; um 400 traz `errors` campo a campo (validação do B39).
+export function saveSoapDoctorVersion(consultationId: string, soapId: string, versaoMedico: SoapVersion) {
+  const path = `/api/consultations/${encodeURIComponent(consultationId)}/soap/${encodeURIComponent(soapId)}`;
+  return apiRequest(path, {
+    method: "PUT",
+    body: JSON.stringify({ versao_medico: versaoMedico }),
+  });
+}
+
+const soapPath = (consultationId: string, soapId: string) =>
+  `/api/consultations/${encodeURIComponent(consultationId)}/soap/${encodeURIComponent(soapId)}`;
+
+// Aprovação do SOAP: pré-requisito do "Inserir no prontuário" (B53); o SoapEditor (B43) usa também.
+export function approveSoap(consultationId: string, soapId: string) {
+  return apiRequest(`${soapPath(consultationId, soapId)}/approve`, { method: "POST" });
+}
+
+// Registra que o SOAP foi escrito no PEP (status inserido_no_pep). Só depois da escrita confirmada.
+export function markSoapInserted(consultationId: string, soapId: string, pep: string) {
+  return apiRequest(`${soapPath(consultationId, soapId)}/inserted`, {
+    method: "POST",
+    body: JSON.stringify({ pep }),
+  });
+}
+
 export function getTranscriptionLog(patientId: string) {
   return apiRequest(`/api/patients/${encodeURIComponent(patientId)}/transcription-log`);
 }
 
-export async function getConsultationSoap(consultationId: string) {
-  try {
-    return await apiRequest(`/api/consultations/${encodeURIComponent(consultationId)}/soap`) as {
-      soap: import("../features/shared/types").SoapDocument;
-    };
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("Ainda nao existe SOAP")) {
-      return { soap: null };
-    }
-    throw error;
-  }
-}
+// B38: sugestões curtas sobre as transcrições dos últimos `janela_min` minutos.
+export type Suggestion = { tipo: string; texto: string };
 
-export function generateConsultationSoap(consultationId: string) {
-  return apiRequest(`/api/consultations/${encodeURIComponent(consultationId)}/soap`, {
+export function getRecommendations(payload: {
+  patient_id: string;
+  consultation_id: string;
+  janela_min: number;
+}) {
+  return apiRequest("/api/recommendations", {
     method: "POST",
-  }) as Promise<{ soap: import("../features/shared/types").SoapDocument }>;
+    body: JSON.stringify(payload),
+  });
 }
 
-export function updateConsultationSoap(
-  consultationId: string,
-  documentId: string,
-  versaoMedico: import("../features/shared/types").SoapV1
+export function updateTranscriptionTurnRole(
+  patientId: string,
+  transcriptionId: string,
+  turnIndex: number,
+  role: "medico" | "paciente" | "outro"
 ) {
   return apiRequest(
-    `/api/consultations/${encodeURIComponent(consultationId)}/soap/${encodeURIComponent(documentId)}`,
-    { method: "PUT", body: JSON.stringify({ versao_medico: versaoMedico }) }
-  ) as Promise<{ soap: import("../features/shared/types").SoapDocument }>;
+    `/api/patients/${encodeURIComponent(patientId)}/transcription-log/${encodeURIComponent(transcriptionId)}/turns/${turnIndex}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    }
+  );
 }
 
-export function approveConsultationSoap(consultationId: string, documentId: string) {
+export function updateTranscriptionRoles(
+  patientId: string,
+  transcriptionId: string,
+  roles: string[],
+) {
   return apiRequest(
-    `/api/consultations/${encodeURIComponent(consultationId)}/soap/${encodeURIComponent(documentId)}/approve`,
-    { method: "POST" }
-  ) as Promise<{ soap: import("../features/shared/types").SoapDocument }>;
-}
-
-export function searchCid10(query: string) {
-  return apiRequest(`/api/cid10?q=${encodeURIComponent(query)}&limit=8`) as Promise<{
-    results: { code: string; description: string }[];
-  }>;
+    `/api/patients/${encodeURIComponent(patientId)}/transcription-log/${encodeURIComponent(transcriptionId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ roles }),
+    },
+  );
 }

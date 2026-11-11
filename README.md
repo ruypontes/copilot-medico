@@ -56,7 +56,8 @@ Não é preciso ter Python instalado — a imagem do backend já usa Python 3.11
 cp API/.env.example API/.env
 ```
 
-Preencha em `API/.env` no mínimo `GEMINI_API_KEY`, `AUTH_SECRET_KEY` e
+Preencha em `API/.env` no mínimo `ANTHROPIC_API_KEY` (Claude, o modelo padrão; o
+`GEMINI_API_KEY` é a reserva e a transcrição de áudio), `AUTH_SECRET_KEY` e
 `AUTH_BOOTSTRAP_EMAIL` / `AUTH_BOOTSTRAP_PASSWORD`. Sem `AUTH_SECRET_KEY` toda
 rota autenticada responde 401; sem `AUTH_BOOTSTRAP_*` nenhum administrador é
 criado e ninguém consegue entrar (D‑22/D‑23). O arquivo está no `.gitignore`.
@@ -137,7 +138,10 @@ python scripts/download_models.py
 python server.py
 ```
 
-Servidor em `http://localhost:3001`.
+Servidor em `http://localhost:3001`, acessível só nesta máquina e sem modo
+debug. Para depurar localmente, suba com `FLASK_DEBUG=1 python server.py`; o
+modo debug permite executar código pelo navegador e nunca deve ser usado
+fora da sua máquina.
 
 Para criar ou verificar o administrador inicial sem subir o servidor (com
 `AUTH_BOOTSTRAP_EMAIL` e `AUTH_BOOTSTRAP_PASSWORD` configurados), a partir da
@@ -196,9 +200,13 @@ Ao mudar um modelo em `API/models/`, gere a migração e confira:
 cd API && alembic revision --autogenerate -m "descricao" && alembic check
 ```
 
-**Conhecido e quebrado nesta versão:** a extração do Amplimed usa dois conjuntos
-de seletores divergentes (D‑01); a diarização está em modo de teste (D‑03);
-médicos não veem os pacientes legados (D‑24).
+**Limitações conhecidas nesta versão** (situação completa em
+[docs/02](docs/02-diagnostico-estado-atual.md#atualização-de-09112026--o-que-o-grupo-5-20262-v50-mudou)):
+
+- o SOAP é inserido só no e-SUS PEC; a escrita no Amplimed ainda não existe (B49);
+- a extensão ainda não tem a tela de editar e aprovar o SOAP (B43);
+- não há registro de consentimento da gravação (B28);
+- o backend não roda em Python 3.13 ou superior (D‑05).
 
 ## Validação do README
 
@@ -253,9 +261,7 @@ pip install -r requirements.txt
 python -m spacy download pt_core_news_lg
 ```
 
-**Ainda pendentes:**
-1. Quem paga a chave Gemini durante o semestre e qual o limite mensal (P2).
-2. Se a trilha privada (Supabase/Vercel) fica congelada até M4 (P4).
-3. Médicos que participarão do piloto na Sprint 6 (P5).
-4. Cadastro de identificação do paciente opcional e cifrado (P7); exibir CID‑10 sugerido (P8); prontuário dos vídeos finais (P9).
-5. Destino do sistema gerenciador web do Grupo 2 (P10) e dos pacientes legados sem médico (P11).
+**Decididas em 15/10/2026:** as pendências P1 a P13 (chave da IA, piloto,
+identificação do paciente, CID‑10, sistema gerenciador web, pacientes legados e
+as demais) foram resolvidas pelo PO. Ver
+[docs/12 — Decisões do PO](docs/12-decisoes-po-2026-10-15.md).

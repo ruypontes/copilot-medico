@@ -1,4 +1,4 @@
-import { Key, ReactNode } from "react";
+﻿import { Key, ReactNode } from "react";
 
 // --- Tipos ---
 export type Message = {
@@ -29,6 +29,14 @@ export type TranscriptionDialogueTurn = {
   role?: string;
   role_key?: string;
   text?: string;
+  speaker?: string;
+  speaker_id?: string | number;
+  start?: number;
+  end?: number;
+  inicio?: number;
+  fim?: number;
+  papel?: string;
+  [key: string]: unknown;
 };
 
 export type TranscriptionLogItem = {
@@ -42,13 +50,15 @@ export type TranscriptionLogItem = {
   dialogue?: TranscriptionDialogueTurn[];
 };
 
+// SOAP no esquema SoapV1 (B39, backend/soap/schema.py): versão da IA x versão do
+// médico e o diff calculado pela API (B44).
 export type SoapHypothesis = {
   descricao: string;
   cid10: string | null;
   confianca: "baixa" | "media" | "alta";
 };
 
-export type SoapV1 = {
+export type SoapVersion = {
   subjetivo: string;
   objetivo: string;
   avaliacao: string;
@@ -58,21 +68,50 @@ export type SoapV1 = {
   pendencias: string[];
 };
 
+export type SoapDiffSnippet = {
+  op: "igual" | "removido" | "adicionado";
+  texto: string;
+};
+
+export type SoapDiffSection = {
+  secao: keyof SoapVersion;
+  titulo: string;
+  tipo: "texto" | "lista";
+  alterada: boolean;
+  trechos: SoapDiffSnippet[];
+};
+
+export type SoapDiffResult = {
+  alterado: boolean;
+  secoes_alteradas: string[];
+  secoes: SoapDiffSection[];
+};
+
 export type SoapDocument = {
   id: string;
   consultation_id: string;
-  versao_ia: SoapV1;
-  versao_medico: SoapV1 | null;
   status: "gerado" | "editado" | "aprovado" | "inserido_no_pep";
-  criado_em: string;
-  aprovado_em: string | null;
+  schema_version: string;
+  prompt: { id: string; versao: string | null } | null;
+  versao_ia: SoapVersion;
+  versao_medico: SoapVersion | null;
+  // O que o médico vê e aprova: a edição dele, ou a da IA se não editou.
+  atual: SoapVersion;
+  created_at: string | null;
+  updated_at: string | null;
+  approved_at: string | null;
+  diff: SoapDiffResult | null;
 };
+export type WindowWithWebkitAudio = Window &
+  typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+  };
 
 export function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-// Mensagem do assistente exibida no chat (avisos, erros e confirmações).
+// Mensagem do assistente exibida no chat (avisos, erros e confirma├º├Áes).
 export function botMessage(text: ReactNode): Message {
   return {
     id: Date.now(),
