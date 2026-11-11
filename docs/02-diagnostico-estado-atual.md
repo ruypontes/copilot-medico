@@ -8,7 +8,7 @@ Situação dos achados D‑01…D‑34 na `develop` (até o PR #120). As seçõe
 
 | ID | Achado | Situação | Onde |
 |---|---|---|---|
-| D‑01 | Extração do Amplimed quebrada | **Resolvido** | Contrato `pep-import` (B07); leitura em `src/pep/amplimed.ts` (B48). A escrita do SOAP no Amplimed ainda falta (B49) |
+| D‑01 | Extração do Amplimed quebrada | **Resolvido** | Contrato `pep-import` (B07); leitura em `src/pep/amplimed.ts` (B48). Escrita do SOAP no campo de evolução (B49), conferida na fixture; falta validar numa conta real |
 | D‑02 | Botão flutuante comentado | **Resolvido** | Volta só em página de PEP detectada (B52) |
 | D‑03 | `MODO_TESTE_SOZINHO = True` | **Resolvido** | Flag removida de `audio_service.py` |
 | D‑04 | Transcrição por `recognize_google` | **Mitigado** | Provedores Gemini áudio (B31) e Whisper/Groq (B32); `recognize_google` segue só no fallback antigo (`processador_voz.py`) |
