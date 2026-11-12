@@ -196,7 +196,7 @@ def _enviar_ao_gemini(operacao, patient_id, consultation_id, texto):
         if isinstance(parte, dict)
     )
     _registrar_envio_externo(PROVEDOR_GEMINI, operacao, tamanho, consultation_id)
-    return send_message(patient_id, consultation_id, texto)
+    return enviar_mensagem(patient_id, consultation_id, texto)
 
 def _registrar_envio_audio(provedor, tamanho_bytes):
     """Gancho do TranscritorVoz: soma cada trecho de audio enviado ao Google.
