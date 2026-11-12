@@ -65,7 +65,14 @@ from repositories import (
 from backend.processador_voz.processador_voz import TranscritorVoz
 from backend.audio_service import Diarizador
 from backend.transcription import obter_provedor
-
+from repositories.auditoria import (
+    OPERACAO_CHAT,
+    OPERACAO_EXTENSAO,
+    OPERACAO_PDF,
+    OPERACAO_RECOMENDACAO,
+    OPERACAO_TRANSCRICAO,
+    PROVEDOR_GEMINI,
+)
 
 def get_cors_origins():
     configured_origins = settings.cors_origins.strip()
