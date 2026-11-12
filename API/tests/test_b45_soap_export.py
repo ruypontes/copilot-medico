@@ -1,6 +1,5 @@
 
 """B45 - exportacao SOAP em PDF e Markdown."""
-import io
 
 import pytest
 
