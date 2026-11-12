@@ -62,14 +62,6 @@ from repositories import (
     TransicaoInvalida,
     sessao,
 )
-from repositories.auditoria import (
-    OPERACAO_CHAT,
-    OPERACAO_EXTENSAO,
-    OPERACAO_PDF,
-    OPERACAO_RECOMENDACAO,
-    OPERACAO_TRANSCRICAO,
-    PROVEDOR_GEMINI,
-)
 from backend.processador_voz.processador_voz import TranscritorVoz
 from backend.audio_service import Diarizador
 from backend.transcription import obter_provedor
