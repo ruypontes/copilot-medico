@@ -659,6 +659,65 @@ def test_transcribe_audio_provedor_falha_cai_no_diarizador(client, medico, pacie
     assert resp.get_json()["transcription"] == "Paciente relata dor de cabeca"
 
 
+def test_transcribe_audio_fallback_legacy(client, medico, paciente, monkeypatch):
+    """Se Gemini e Diarizador falharem, usa o TranscritorVoz legado."""
+    from types import SimpleNamespace
+
+    server = importlib.import_module("server")
+
+    class _FakeGemini:
+        nome = "gemini"
+
+        def processar_audio(self, caminho):
+            raise RuntimeError("Falha simulada no Gemini")
+
+    class _FakeAudioProcessor:
+        def processar_audio(self, caminho):
+            raise RuntimeError("Falha simulada no Diarizador")
+
+    class _FakeTranscritor:
+        def __init__(self, idioma):
+            self.reconhecedor = self
+
+        def record(self, source):
+            return SimpleNamespace(
+                frame_data=b"\x00" * 32000,
+                sample_rate=16000,
+                sample_width=2,
+            )
+
+        def transcrever(self, audio_data):
+            return "Transcricao pelo legado"
+
+    class _FakeAudioFile:
+        def __init__(self, caminho):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(server, "transcription_provider", _FakeGemini())
+    monkeypatch.setattr(server, "audio_processor", _FakeAudioProcessor())
+    monkeypatch.setattr(server, "TranscritorVoz", _FakeTranscritor)
+    monkeypatch.setattr(server.sr, "AudioFile", _FakeAudioFile)
+
+    pid, cid = paciente
+    resp = client.post("/api/transcribe_audio", data={
+        "audio_file": _audio(),
+        "patient_id": pid,
+        "consultation_id": cid,
+    }, content_type="multipart/form-data", headers=medico)
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["transcription"] == "Transcricao pelo legado"
+    assert body["used_fallback"] is True
+    assert body["is_error"] is False
+
+
 def test_transcribe_audio_sem_fala_nao_grava(client, medico, paciente, monkeypatch):
     server = importlib.import_module("server")
     monkeypatch.setattr(server, "transcription_provider", _FakeGemini({
