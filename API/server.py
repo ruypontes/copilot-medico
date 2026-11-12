@@ -69,7 +69,6 @@ from repositories.auditoria import (
     OPERACAO_CHAT,
     OPERACAO_EXTENSAO,
     OPERACAO_PDF,
-    OPERACAO_RECOMENDACAO,
     OPERACAO_TRANSCRICAO,
     PROVEDOR_GEMINI,
 )
