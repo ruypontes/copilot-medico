@@ -254,8 +254,34 @@ class ProvedorMock:
         return Resposta(texto, _estimar_tokens(conteudo), _estimar_tokens(texto), estimado=True)
 
 
+class _ModeloGenai:
+    """Cliente google-genai (B41) com o `generate_content(conteudo)` usado aqui."""
+
+    def __init__(self, api_key: str, modelo: str, prompt: str, genai_mod=None):
+        genai = genai_mod  # testes injetam um SDK falso
+        if genai is None:
+            from google import genai
+
+        self._cliente = genai.Client(api_key=api_key)
+        self._modelo = modelo
+        self._config = {
+            "system_instruction": prompt,
+            "response_mime_type": "application/json",
+            "temperature": 0.2,
+        }
+
+    def generate_content(self, conteudo: str):
+        resposta = self._cliente.models.generate_content(
+            model=self._modelo, contents=conteudo, config=self._config,
+        )
+        if not resposta.text:
+            # google-genai devolve text=None em vez de levantar quando bloqueia
+            raise ValueError("resposta bloqueada ou vazia")
+        return resposta
+
+
 class ProvedorGemini:
-    """Gemini via google-generativeai (ja e dependencia do projeto, importada so ao usar).
+    """Gemini via google-genai (ja e dependencia do projeto, importada so ao usar).
 
     `response_mime_type=application/json` pede JSON puro; o esquema NAO e imposto
     pela API de proposito: a metrica "JSON valido" mede o que o modelo produz, e
@@ -269,14 +295,7 @@ class ProvedorGemini:
         self.modelo = modelo
         self.modelo_preco = modelo
         if modelo_generativo is None:
-            import google.generativeai as genai
-
-            genai.configure(api_key=api_key)
-            modelo_generativo = genai.GenerativeModel(
-                model_name=modelo,
-                system_instruction=prompt,
-                generation_config={"response_mime_type": "application/json", "temperature": 0.2},
-            )
+            modelo_generativo = _ModeloGenai(api_key, modelo, prompt)
         self._modelo = modelo_generativo
 
     def gerar(self, caso: dict, erro_anterior: str | None = None) -> Resposta:
@@ -287,12 +306,12 @@ class ProvedorGemini:
                 "Responda novamente apenas com o objeto JSON valido."
             )
         resposta = self._modelo.generate_content(conteudo)
-        texto = resposta.text  # levanta ValueError se bloqueada/vazia: tratado como erro do provedor
+        texto = resposta.text  # bloqueada/vazia ja levantou ValueError: tratado como erro do provedor
         uso = getattr(resposta, "usage_metadata", None)
         entrada = int(getattr(uso, "prompt_token_count", 0) or 0)
         candidatos = int(getattr(uso, "candidates_token_count", 0) or 0)
-        # O "pensamento" do 2.5 e cobrado como SAIDA. O google-generativeai 0.8.x (o que o
-        # projeto fixa) nao expoe `thoughts_token_count`; o total, que o inclui, permite derivar.
+        # O "pensamento" do 2.5 e cobrado como SAIDA. Quando a resposta nao traz
+        # `thoughts_token_count`, o total, que o inclui, permite derivar.
         pensamento = getattr(uso, "thoughts_token_count", None)
         if pensamento is None:
             total = int(getattr(uso, "total_token_count", 0) or 0)

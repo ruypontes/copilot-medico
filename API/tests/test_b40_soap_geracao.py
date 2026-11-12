@@ -5,6 +5,7 @@ import re
 import pytest
 from sqlalchemy import text
 
+from backend.llm import LlmError
 from backend.soap import gerador, response_schema, validar_soap
 from backend.soap.material import montar_material
 from ids import DOCTOR_B, TEST_USER_ID
@@ -187,7 +188,7 @@ def modelo(monkeypatch):
     import server
 
     falso = ModeloFalso()
-    monkeypatch.setattr(server.gemini_connection, "gerar_resposta_unica", falso)
+    monkeypatch.setattr(server.chat_ia, "gerar_resposta_unica", falso)
     return falso
 
 
@@ -211,7 +212,7 @@ def test_gera_grava_tokenizado_e_devolve_reidratado(client, auth_headers, consul
         chamadas.append({"conteudo": conteudo, "schema": schema})
         return json.dumps(_soap(subjetivo=f"{_token(conteudo)} relata cefaleia ha 3 dias."))
 
-    monkeypatch.setattr(server.gemini_connection, "gerar_resposta_unica", responde)
+    monkeypatch.setattr(server.chat_ia, "gerar_resposta_unica", responde)
 
     r = client.post(f"/api/consultations/{cid}/soap", headers=auth_headers("medico"))
 
@@ -235,7 +236,7 @@ def test_edicao_do_medico_volta_a_ser_tokenizada(client, auth_headers, consulta,
 
     pid, cid = consulta
     _transcrever(pid, cid, "Maria Souza relata cefaleia.")
-    monkeypatch.setattr(server.gemini_connection, "gerar_resposta_unica",
+    monkeypatch.setattr(server.chat_ia, "gerar_resposta_unica",
                         lambda i, c, s=None: json.dumps(_soap(subjetivo=f"{_token(c)} relata cefaleia.")))
     soap = client.post(f"/api/consultations/{cid}/soap", headers=auth_headers("medico")).get_json()["soap"]
 
@@ -302,10 +303,7 @@ def test_cota_esgotada_vira_429(client, auth_headers, consulta, modelo):
     pid, cid = consulta
     _transcrever(pid, cid, "Paciente com tosse.")
 
-    class ResourceExhausted(Exception):
-        pass
-
-    modelo.respostas.append(ResourceExhausted("quota"))
+    modelo.respostas.append(LlmError("429 RESOURCE_EXHAUSTED", cota_esgotada=True))
     r = client.post(f"/api/consultations/{cid}/soap", headers=auth_headers("medico"))
 
     assert r.status_code == 429 and "Limite de uso" in r.get_json()["message"]

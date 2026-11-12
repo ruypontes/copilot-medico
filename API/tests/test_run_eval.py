@@ -418,7 +418,7 @@ def test_gemini_usa_os_tokens_informados_e_soma_o_pensamento_na_saida():
 
 
 def test_gemini_deriva_o_pensamento_do_total_quando_o_sdk_nao_expoe_o_campo():
-    """google-generativeai 0.8.x nao tem thoughts_token_count; o total inclui o pensamento (cobrado como saida)."""
+    """Sem thoughts_token_count na resposta, o total inclui o pensamento (cobrado como saida)."""
     uso = types.SimpleNamespace(prompt_token_count=1000, candidates_token_count=300, total_token_count=2000)
     provedor = ev.ProvedorGemini("chave", "gemini-2.5-flash", "p", ModeloGeminiFalso(soap_json(), uso))
 
@@ -453,6 +453,46 @@ def test_gemini_reenvia_o_motivo_da_falha_no_retry():
 
 def test_gemini_resposta_bloqueada_vira_erro_do_provedor(precos):
     provedor = ev.ProvedorGemini("chave", "gemini-2.5-flash", "p", ModeloGeminiFalso("", erro=ValueError("blocked")))
+    r = avaliar(ev.carregar_casos(CASOS)[0], provedor, precos)
+    assert not r.avaliado and "bloqueada" in r.erro_provedor
+
+
+def _genai_falso(texto):
+    """SDK google-genai falso: guarda cada generate_content recebido (B41)."""
+    sdk = types.SimpleNamespace(clientes=[], chamadas=[])
+
+    def generate_content(**kwargs):
+        sdk.chamadas.append(kwargs)
+        return types.SimpleNamespace(text=texto, usage_metadata=None)
+
+    def cliente(**kwargs):
+        sdk.clientes.append(kwargs)
+        return types.SimpleNamespace(models=types.SimpleNamespace(generate_content=generate_content))
+
+    sdk.Client = cliente
+    return sdk
+
+
+def test_modelo_genai_pede_json_com_o_prompt_como_instrucao():
+    sdk = _genai_falso(soap_json())
+    modelo = ev._ModeloGenai("chave", "gemini-2.5-flash", "prompt do eval", genai_mod=sdk)
+    provedor = ev.ProvedorGemini("chave", "gemini-2.5-flash", "p", modelo)
+
+    assert provedor.gerar(ev.carregar_casos(CASOS)[0]).texto == soap_json()
+    assert sdk.clientes == [{"api_key": "chave"}]
+    chamada = sdk.chamadas[0]
+    assert chamada["model"] == "gemini-2.5-flash"
+    assert chamada["config"] == {
+        "system_instruction": "prompt do eval",
+        "response_mime_type": "application/json",
+        "temperature": 0.2,
+    }
+
+
+def test_modelo_genai_resposta_sem_texto_vira_erro_do_provedor(precos):
+    # google-genai devolve text=None em vez de levantar quando bloqueia
+    modelo = ev._ModeloGenai("chave", "gemini-2.5-flash", "p", genai_mod=_genai_falso(None))
+    provedor = ev.ProvedorGemini("chave", "gemini-2.5-flash", "p", modelo)
     r = avaliar(ev.carregar_casos(CASOS)[0], provedor, precos)
     assert not r.avaliado and "bloqueada" in r.erro_provedor
 

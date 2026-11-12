@@ -1,6 +1,6 @@
 """B31: TranscriptionProvider e Gemini audio com marcacao de falantes.
 
-O Gemini nao e chamado de verdade: o SDK `google.generativeai` e trocado por
+O Gemini nao e chamado de verdade: o SDK `google-genai` (B41) e trocado por
 um falso injetado no provedor. O audio e a fixture real do eval (B37), entao a
 duracao e o envio dos bytes sao conferidos com um WAV de verdade.
 
@@ -36,13 +36,16 @@ RESPOSTA_GEMINI = {
 }
 
 
-class _ModeloFalso:
+class _ClienteFalso:
+    """genai.Client falso: guarda cada generate_content recebido."""
+
     def __init__(self, sdk, **kwargs):
         self.sdk = sdk
-        sdk.modelos.append(kwargs)
+        sdk.clientes.append(kwargs)
+        self.models = self
 
-    def generate_content(self, conteudo, request_options=None):
-        self.sdk.chamadas.append({"conteudo": conteudo, "request_options": request_options})
+    def generate_content(self, model, contents, config=None):
+        self.sdk.chamadas.append({"model": model, "contents": contents, "config": config})
         if self.sdk.erro:
             raise self.sdk.erro
         return types.SimpleNamespace(text=self.sdk.resposta)
@@ -50,10 +53,10 @@ class _ModeloFalso:
 
 def _sdk_falso(resposta=RESPOSTA_GEMINI, erro=None):
     sdk = types.SimpleNamespace(
-        modelos=[], chamadas=[], erro=erro,
+        clientes=[], chamadas=[], erro=erro,
         resposta=resposta if isinstance(resposta, str) else json.dumps(resposta),
     )
-    sdk.GenerativeModel = lambda **kw: _ModeloFalso(sdk, **kw)
+    sdk.Client = lambda **kw: _ClienteFalso(sdk, **kw)
     return sdk
 
 
@@ -70,7 +73,7 @@ def _duracao(caminho):
 
 # ---------- escolha do provedor pelo .env ----------
 
-def test_padrao_e_gemini_com_a_chave_do_chat():
+def test_sem_chave_da_groq_o_padrao_e_o_gemini():
     provedor = obter_provedor(_config(gemini_api_key="chave"))
     assert isinstance(provedor, GeminiAudioProvider)
     assert isinstance(provedor, TranscriptionProvider)
@@ -128,10 +131,13 @@ def test_envia_os_bytes_do_wav_embutidos_com_json():
     sdk = _sdk_falso()
     GeminiAudioProvider(api_key="k", modelo="gemini-x", genai_mod=sdk).processar_audio(str(FIXTURE))
 
-    modelo = sdk.modelos[0]
-    assert modelo["model_name"] == "gemini-x"
-    assert modelo["generation_config"]["response_mime_type"] == "application/json"
-    prompt, audio = sdk.chamadas[0]["conteudo"]
+    assert sdk.clientes == [{"api_key": "k", "http_options": {"timeout": 300_000}}]
+    chamada = sdk.chamadas[0]
+    assert chamada["model"] == "gemini-x"
+    assert chamada["config"]["response_mime_type"] == "application/json"
+    assert {s["threshold"] for s in chamada["config"]["safety_settings"]} == {"BLOCK_ONLY_HIGH"}
+    prompt, parte = chamada["contents"]
+    audio = parte["inline_data"]
     assert "medico" in prompt and "paciente" in prompt
     assert audio["mime_type"] == "audio/wav"
     assert audio["data"] == FIXTURE.read_bytes()
@@ -147,7 +153,7 @@ def test_wav_grande_e_fatiado_com_tempos_deslocados(monkeypatch):
     assert len(sdk.chamadas) == 3  # duas metades e o resto do cabecalho
     total = 0.0
     for chamada in sdk.chamadas:
-        audio = chamada["conteudo"][1]
+        audio = chamada["contents"][1]["inline_data"]
         assert len(audio["data"]) <= tamanho // 2
         with wave.open(io.BytesIO(audio["data"]), "rb") as wf:  # cada pedaco e um WAV valido
             total += wf.getnframes() / wf.getframerate()
@@ -202,9 +208,17 @@ def test_resposta_bloqueada_vira_transcription_error():
             raise ValueError("finish_reason SAFETY")
 
     sdk = _sdk_falso()
-    sdk.GenerativeModel = lambda **kw: types.SimpleNamespace(
-        generate_content=lambda conteudo, request_options=None: _Bloqueada())
+    sdk.Client = lambda **kw: types.SimpleNamespace(
+        models=types.SimpleNamespace(generate_content=lambda **k: _Bloqueada()))
     with pytest.raises(TranscriptionError, match="SAFETY"):
+        GeminiAudioProvider(api_key="k", genai_mod=sdk).processar_audio(str(FIXTURE))
+
+
+def test_resposta_sem_texto_vira_transcription_error():
+    # google-genai devolve text=None em vez de levantar quando bloqueia
+    sdk = _sdk_falso()
+    sdk.resposta = None
+    with pytest.raises(TranscriptionError, match="vazia ou bloqueada"):
         GeminiAudioProvider(api_key="k", genai_mod=sdk).processar_audio(str(FIXTURE))
 
 

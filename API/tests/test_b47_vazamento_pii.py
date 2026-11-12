@@ -27,13 +27,14 @@ avisando para remover a entrada).
 
 Rotas cobertas
 --------------
-- POST /api/consultations/<id>/soap -> gemini_connection.gerar_resposta_unica
-- POST /api/chat                   -> gemini_connection.send_message
+- POST /api/consultations/<id>/soap -> backend.llm.chat.gerar_resposta_unica
+- POST /api/chat                   -> backend.llm.chat.send_message
 
 Fora de escopo
 --------------
-- Áudio enviado ao Gemini para transcrição (B31): outro fluxo.
-- Rotas de recomendações, PDF e pep-import.
+- Áudio transcrito e PDF: cobertos ponta a ponta no B60
+  (test_b60_vazamento_completo.py), com este mesmo verificador.
+- Rota pep-import.
 - Nomes de terceiros (mãe em caso-19/20) sem spaCy: cobertos num teste
   separado, com skip claro quando o modelo não está instalado.
 """
@@ -460,7 +461,7 @@ def payloads_soap(monkeypatch):
     import server
 
     falso = _ModeloFalsoSOAP()
-    monkeypatch.setattr(server.gemini_connection, "gerar_resposta_unica", falso)
+    monkeypatch.setattr(server.chat_ia, "gerar_resposta_unica", falso)
     return falso
 
 
@@ -469,7 +470,7 @@ def payloads_chat(monkeypatch):
     import server
 
     falso = _ModeloFalsoChat()
-    monkeypatch.setattr(server.gemini_connection, "send_message", falso)
+    monkeypatch.setattr(server.chat_ia, "send_message", falso)
     return falso
 
 

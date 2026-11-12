@@ -1,0 +1,76 @@
+name: E2E da extensão
+
+# B56: cenário feliz no Chromium com a extensão carregada (login, paciente,
+# gravação com áudio de fixture, SOAP de fixture e inserção no e-SUS PEC falso),
+# contra o backend de verdade com a IA trocada por fixture. Roda toda noite em
+# develop, sob demanda e nos PRs que mexem no próprio E2E.
+# Como rodar na sua máquina: front/copmed-extension/e2e/README.md.
+
+on:
+  schedule:
+    # 06:00 UTC = 03:00 em Brasília
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - "front/copmed-extension/e2e/**"
+      - "front/copmed-extension/playwright.config.ts"
+      - "API/scripts/servidor_e2e.py"
+      - ".github/workflows/testes_e2e.yml"
+
+concurrency:
+  group: e2e-extensao-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cenario-feliz:
+    name: "E2E Playwright (cenário feliz)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Baixar o código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: API/requirements-min.txt
+
+      - name: Instalar o backend (subconjunto leve, sem Vosk nem spaCy)
+        run: pip install -r API/requirements-min.txt
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: front/copmed-extension/package-lock.json
+
+      - name: Instalar dependências da extensão
+        working-directory: ./front/copmed-extension
+        run: npm ci
+
+      - name: Instalar o Chromium do Playwright
+        working-directory: ./front/copmed-extension
+        run: npx playwright install --with-deps chromium
+
+      - name: Rodar o E2E (build da extensão + Playwright)
+        working-directory: ./front/copmed-extension
+        # O popup da extensão precisa de janela: xvfb-run dá uma tela virtual.
+        run: xvfb-run -a npm run test:e2e
+
+      - name: Publicar o relatório do Playwright
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-e2e
+          path: |
+            front/copmed-extension/playwright-report/
+            front/copmed-extension/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

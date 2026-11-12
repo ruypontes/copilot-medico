@@ -5,8 +5,8 @@
  * `rodarSuiteDeContratoPepAdapter`, que registra os `describe`/`it` no
  * contexto de quem a chamar. Assim:
  *   - `pepAdapter.contract.test.ts` roda contra o fake (B48, agora).
- *   - `amplimed.contract.test.ts` rodará contra o Amplimed (B49).
- *   - `esusPec.contract.test.ts` rodará contra o e-SUS PEC (B50).
+ *   - `amplimed.contract.test.ts` roda contra o Amplimed (B49).
+ *   - `esusPec.contract.test.ts` roda contra o e-SUS PEC (B50).
  *
  * O nome do arquivo NÃO termina em `.test.ts` de propósito: se
  * terminasse, o Vitest tentaria executá-lo diretamente e falharia por
@@ -27,12 +27,16 @@ import type { PepAdapter } from "../pep/pepAdapter";
  * - `lerCampoEvolucao`: OPCIONAL. Quando fornecida, a suíte verifica
  *   que o texto escrito por `writeEvolution` aparece de fato no campo
  *   de evolução da página.
+ * - `lePaciente`: OPCIONAL (padrão true). `false` para um adaptador que
+ *   ainda não lê o cabeçalho do paciente: a suíte passa a exigir `null`
+ *   na página do PEP, em vez de dados inventados.
  */
 export interface OpcoesContratoPepAdapter {
   nome: string;
   criarAdaptador: () => PepAdapter;
   criarPaginaPep: () => Document;
   lerCampoEvolucao?: (page: Document) => string | null;
+  lePaciente?: boolean;
 }
 
 /**
@@ -62,7 +66,7 @@ function criarPaginaVazia(): Document {
 export function rodarSuiteDeContratoPepAdapter(
   opcoes: OpcoesContratoPepAdapter,
 ): void {
-  const { nome, criarAdaptador, criarPaginaPep, lerCampoEvolucao } = opcoes;
+  const { nome, criarAdaptador, criarPaginaPep, lerCampoEvolucao, lePaciente = true } = opcoes;
 
   describe(`Contrato do adaptador de PEP: ${nome}`, () => {
     // -----------------------------------------------------------------
@@ -104,6 +108,11 @@ export function rodarSuiteDeContratoPepAdapter(
     it("readPatient na página do PEP só tem chaves nome/idade/sexo e todas são texto", () => {
       const adaptador = criarAdaptador();
       const resultado = adaptador.readPatient(criarPaginaPep());
+
+      if (!lePaciente) {
+        expect(resultado).toBeNull();
+        return;
+      }
 
       expect(resultado).not.toBeNull();
       if (resultado === null) return; // apenas para estreitar o tipo

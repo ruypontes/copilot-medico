@@ -547,7 +547,7 @@ def test_recommendations_success(client, medico, paciente, monkeypatch):
 
     pid, cid = paciente
     TranscricaoRepository(sessao.obter_sessao()).adicionar(pid, cid, texto="Paciente com tosse", duracao_s=60)
-    monkeypatch.setattr(server.gemini_connection, "gerar_resposta_unica",
+    monkeypatch.setattr(server.chat_ia, "gerar_resposta_unica",
                         lambda _i, _c: '{"itens": [{"tipo": "exame", "texto": "Auscultar pulmões"}]}')
     resp = client.post("/api/recommendations", json={
         "patient_id": pid, "consultation_id": cid,

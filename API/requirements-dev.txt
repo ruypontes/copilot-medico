@@ -16,3 +16,7 @@ psycopg[binary]>=3.1,<4
 # B10: lint e testes de contrato da API (OpenAPI x rotas Flask, B07)
 ruff==0.16.10
 jsonschema==4.26.0
+
+# B60: o teste de vazamento completo le PDFs de verdade com o extrator real
+# (backend/pdf_reader.py). Puro Python, sem dependencia nativa.
+PyPDF2==3.0.1

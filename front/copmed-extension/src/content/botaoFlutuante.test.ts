@@ -75,7 +75,7 @@ describe("botão flutuante", () => {
     expect(adaptador.id).toBe("amplimed");
     expect(campos).toMatchObject({ peso: "72.5", anamnese: expect.stringContaining("febre") });
     expect(selecaoEnviada).toEqual(selecao);
-    // O Amplimed ainda não lê o paciente (B49): envia, mas avisa que não conferiu.
+    // O Amplimed ainda não lê o paciente: envia, mas avisa que não conferiu.
     await vi.waitFor(() => expect(botao()!.textContent).toBe("Dados enviados, sem conferir o paciente"));
 
     vi.advanceTimersByTime(AVISO_MS);
