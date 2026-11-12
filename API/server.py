@@ -1978,13 +1978,6 @@ def handle_recommendations():
     if not _consultas().pertence_ao_paciente(patient_id, consultation_id):
         return _json_error("Consulta nao encontrada para este paciente.", 404)
 
-        # Chama a API Gemini. Ela carrega o histórico (incluindo transcrições) e
-        # recebe o prompt de recomendação.
-        resposta_ia = _enviar_ao_gemini(
-            OPERACAO_RECOMENDACAO,
-            patient_id,
-            consultation_id,
-        )
     desde = datetime.now(timezone.utc) - timedelta(minutes=janela_min)
     transcricoes = _transcricoes().listar_da_consulta_desde(consultation_id, desde)
     trecho = recomendacoes.montar_trecho(transcricoes)
