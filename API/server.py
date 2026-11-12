@@ -10,6 +10,7 @@ import speech_recognition as sr
 from backend import audio_chunks
 from backend.soap import cid10
 from backend.llm import chat as chat_ia
+from backend.llm.chat import send_message
 from backend import limpeza_audio
 from backend import pdf_reader
 from backend import pep_import
@@ -195,8 +196,7 @@ def _enviar_ao_gemini(operacao, patient_id, consultation_id, texto):
         if isinstance(parte, dict)
     )
     _registrar_envio_externo(PROVEDOR_GEMINI, operacao, tamanho, consultation_id)
-    return gemini_connection.send_message(patient_id, consultation_id, texto)
-
+    return enviar_mensagem(patient_id, consultation_id, texto)
 
 def _registrar_envio_audio(provedor, tamanho_bytes):
     """Gancho do TranscritorVoz: soma cada trecho de audio enviado ao Google.
