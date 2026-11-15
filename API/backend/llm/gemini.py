@@ -62,7 +62,8 @@ def _conversa(historico: list[dict], texto: str) -> tuple:
     conversa = []
     for mensagem in historico or []:
         if not isinstance(mensagem, dict) or "role" not in mensagem or "parts" not in mensagem:
-            print(f"Aviso: mensagem mal formatada no histórico ignorada: {mensagem}")
+            # So o tipo: a mensagem traz conteudo da consulta.
+            print(f"Aviso: mensagem mal formatada no histórico ignorada ({type(mensagem).__name__}).")
             continue
         conversa.append((mensagem["role"], _texto(mensagem)))
     if conversa and conversa[-1] == ("user", texto):

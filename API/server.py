@@ -8,6 +8,7 @@ import speech_recognition as sr
 
 # Assuming these imports are correct and available
 from backend import audio_chunks
+from backend.soap import cid10
 from backend.llm import chat as chat_ia
 from backend import limpeza_audio
 from backend import pdf_reader
@@ -80,12 +81,35 @@ def get_cors_origins():
 
 
 app = Flask(__name__)
+# Le a tabela CID-10 embarcada ja na subida (B42): a primeira busca nao espera.
+cid10.preload()
+# Teto de qualquer requisicao: sem ele um PDF ou audio era gravado inteiro
+# antes de qualquer checagem. 1 MB de folga sobre a maior parte de audio
+# aceita (B30), para o envelope do multipart.
+app.config["MAX_CONTENT_LENGTH"] = (settings.audio_chunk_max_mb + 1) * 1024 * 1024
 CORS(
     app,
     resources={r"/api/*": {"origins": get_cors_origins()}},
     allow_headers=["Content-Type", "Authorization"],
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 )
+
+
+@app.before_request
+def _recusar_corpo_grande():
+    # Antes da rota: dentro dela o `except Exception` transformaria o 413 do
+    # Werkzeug em 500. Sem Content-Length (envio em chunks) vale o
+    # MAX_CONTENT_LENGTH quando o corpo for lido.
+    limite = app.config["MAX_CONTENT_LENGTH"]
+    if request.content_length is not None and request.content_length > limite:
+        return _json_error(f"Arquivo acima do limite de {limite // (1024 * 1024)} MB.", 413)
+    return None
+
+
+@app.errorhandler(413)
+def _corpo_grande(_erro):
+    limite = app.config["MAX_CONTENT_LENGTH"]
+    return _json_error(f"Arquivo acima do limite de {limite // (1024 * 1024)} MB.", 413)
 
 
 @app.teardown_appcontext
@@ -377,6 +401,32 @@ def health_check():
         "diarizer_loaded": audio_processor is not None,
         "transcription_provider": getattr(transcription_provider, "nome", None),
     }), 200
+
+
+@app.route('/api/cid10', methods=['GET'])
+@roles_required("administrador", "medico")
+def search_cid10_api():
+    """Busca na CID-10 embarcada (B42 / US018): ?q=<codigo ou texto>&limit=1..100.
+
+    Usada pelo campo CID-10 das hipoteses no SoapEditor (B43). A tabela fica
+    em memoria (backend/soap/cid10.py); nada sai do servidor.
+    """
+    query = request.args.get("q", "").strip()
+    if not query:
+        return _json_error("O parametro q e obrigatorio.", 400)
+    try:
+        limit = int(request.args.get("limit", "20"))
+    except ValueError:
+        return _json_error("O parametro limit deve ser um numero inteiro.", 400)
+    if not 1 <= limit <= 100:
+        return _json_error("O parametro limit deve estar entre 1 e 100.", 400)
+
+    try:
+        results = cid10.search(query, limit=limit)
+    except OSError:
+        return _json_error("Nao foi possivel carregar a tabela CID-10.", 500)
+
+    return jsonify({"status": "success", "query": query, "count": len(results), "results": results}), 200
 
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -1841,13 +1891,28 @@ def handle_recommendations():
 
 
 
+def opcoes_do_servidor(ambiente=None):
+    """(host, debug) do `python server.py`.
+
+    O modo debug liga o depurador do Werkzeug, que executa codigo pelo
+    navegador: so com FLASK_DEBUG=1, e nunca no Docker. O host padrao e so
+    esta maquina; o Dockerfile define FLASK_RUN_HOST=0.0.0.0, porque dentro
+    do container a porta precisa aceitar conexoes de fora dele.
+    """
+    ambiente = os.environ if ambiente is None else ambiente
+    debug = ambiente.get("FLASK_DEBUG", "").strip().lower() in {"1", "true"}
+    host = ambiente.get("FLASK_RUN_HOST", "").strip() or "127.0.0.1"
+    return host, debug
+
+
 if __name__ == '__main__':
     # Cria/atualiza as tabelas antes de subir (alembic upgrade head), no
     # Docker e fora dele. O antigo seed do "Joao Silva" (D-09/D-24) saiu.
     sessao.aplicar_migracoes()
-    # Com debug=True o reloader roda o server em um processo filho
+    host, debug = opcoes_do_servidor()
+    # Com debug o reloader roda o server em um processo filho
     # (WERKZEUG_RUN_MAIN): o job sobe so nele, para nao duplicar.
-    if os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    if not debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
         limpeza_audio.iniciar_limpeza_periodica()
     print("Servidor Flask com Gemini e banco relacional iniciado.")
-    app.run(host='0.0.0.0', port=3001, debug=True)
+    app.run(host=host, port=3001, debug=debug)

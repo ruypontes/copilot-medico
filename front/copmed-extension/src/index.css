@@ -78,6 +78,14 @@
     color: #ffffff;
     border: 1px solid #4b5563;
   }
+  /* Editor SOAP (B43) */
+  .soap-editor {
+    --soap-fundo: #2b302e;
+    --soap-campo: #374151;
+    --soap-borda: #4b5563;
+    --soap-texto: #f1f5f3;
+    --soap-suave: #b8c4bf;
+  }
 }
 
 @media (prefers-color-scheme: light) {
@@ -450,4 +458,260 @@ option {
   background-color: rgba(34, 197, 94, 0.22);
   text-decoration: none;
   font-weight: 600;
+}
+
+/* Editor SOAP (B43). Cores por variavel: o tema escuro troca so as variaveis. */
+.soap-editor {
+  --soap-fundo: #f5f8f6;
+  --soap-campo: #ffffff;
+  --soap-borda: #b8c9c2;
+  --soap-texto: #20332f;
+  --soap-suave: #536a63;
+  margin: 10px;
+  padding: 12px;
+  border: 1px solid var(--soap-borda);
+  border-left: 3px solid #336b29;
+  border-radius: 4px;
+  background: var(--soap-fundo);
+  color: var(--soap-texto);
+  text-align: left;
+}
+
+.soap-editor__header,
+.soap-editor__subheader,
+.soap-editor__actions,
+.soap-hypothesis__row,
+.soap-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.soap-editor__header,
+.soap-editor__subheader {
+  justify-content: space-between;
+}
+
+.soap-editor__header h2,
+.soap-editor__subheader h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.soap-editor__subheader h3 {
+  font-size: 0.9rem;
+}
+
+.soap-editor__status {
+  display: inline-block;
+  margin-top: 3px;
+  color: var(--soap-suave);
+  font-size: 0.75rem;
+}
+
+.soap-editor__sections,
+.soap-editor__subsection {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.soap-field {
+  display: grid;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.soap-field textarea,
+.soap-hypothesis input,
+.soap-hypothesis select,
+.soap-list-item input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--soap-borda);
+  border-radius: 3px;
+  background: var(--soap-campo);
+  color: var(--soap-texto);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.soap-field textarea {
+  resize: vertical;
+}
+
+.soap-field textarea:disabled,
+.soap-hypothesis input:disabled,
+.soap-hypothesis select:disabled,
+.soap-list-item input:disabled {
+  opacity: 0.85;
+}
+
+.soap-hypothesis {
+  display: grid;
+  gap: 5px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--soap-borda);
+}
+
+.soap-hypothesis__row select {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.soap-cid-search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.soap-cid-search__input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--soap-borda);
+  border-radius: 3px;
+  background: var(--soap-campo);
+  color: var(--soap-suave);
+}
+
+.soap-hypothesis .soap-cid-search__input input {
+  padding: 6px 0;
+  border: 0;
+  outline: 0;
+}
+
+.soap-cid-search__results {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  width: min(300px, 80vw);
+  max-height: 170px;
+  overflow: auto;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 1px solid var(--soap-borda);
+  background: var(--soap-campo);
+  list-style: none;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+}
+
+.soap-cid-search__results button {
+  width: 100%;
+  padding: 6px 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--soap-texto);
+  text-align: left;
+  font-size: 0.75rem;
+}
+
+.soap-cid-search__results button:hover,
+.soap-cid-search__results button:focus-visible {
+  background: rgba(51, 107, 41, 0.15);
+}
+
+.soap-cid-search__vazio {
+  margin: 2px 0 0;
+  color: var(--soap-suave);
+  font-size: 0.75rem;
+}
+
+.soap-icon-button {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--soap-borda);
+  border-radius: 3px;
+  background: var(--soap-campo);
+  color: var(--soap-texto);
+}
+
+.soap-editor__actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.soap-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--soap-borda);
+  border-radius: 3px;
+  background: var(--soap-campo);
+  color: var(--soap-texto);
+  font-size: 0.8rem;
+}
+
+.soap-button--primary,
+.soap-button--approve {
+  border-color: #114c0e;
+  background: #336b29;
+  color: #ffffff;
+}
+
+.soap-button:disabled,
+.soap-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.soap-editor__message,
+.soap-editor__empty {
+  margin: 8px 0 0;
+  color: var(--soap-suave);
+  font-size: 0.8rem;
+}
+
+.soap-editor__message p,
+.soap-editor__message ul {
+  margin: 0;
+}
+
+.soap-editor__message ul {
+  padding-left: 1rem;
+}
+
+.soap-editor__message--error {
+  color: #c2410c;
+}
+
+.soap-editor__diff {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--soap-borda);
+}
+
+.soap-editor .soap-inserir {
+  margin-top: 10px;
+}
+
+.soap-spin {
+  animation: soap-spin 1s linear infinite;
+}
+
+@keyframes soap-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .soap-spin {
+    animation: none;
+  }
 }

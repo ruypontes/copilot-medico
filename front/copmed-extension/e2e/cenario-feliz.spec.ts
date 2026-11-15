@@ -8,7 +8,8 @@
  * do botão "Inserir no prontuário" (InsertIntoPepButton.tsx), feita de dentro do popup.
  * Quando o B43 entrar, esses passos viram cliques.
  *
- * Amplimed fica de fora até a escrita dele existir (B49).
+ * Amplimed fica de fora: não há Amplimed falso; a escrita dele (B49) é coberta por
+ * src/pep/amplimed.test.ts e amplimed.contract.test.ts.
  */
 
 import { expect, test, type Page } from "@playwright/test";

@@ -2,6 +2,44 @@
 
 Auditoria feita em 15/09/2026 sobre o clone do repositório `Jamuelton/copilot_medico_grupo_6_es` (branch `develop`, último commit 01/12/2025) e sobre a extensão privada v2.3. Cada achado tem um ID (`D‑nn`) referenciado no backlog.
 
+## Atualização de 09/11/2026 — o que o Grupo 5 (2026.2, v5.0) mudou
+
+Situação dos achados D‑01…D‑34 na `develop` (até o PR #120). As seções seguintes ficam como registro do diagnóstico original e da atualização de 20/09.
+
+| ID | Achado | Situação | Onde |
+|---|---|---|---|
+| D‑01 | Extração do Amplimed quebrada | **Resolvido** | Contrato `pep-import` (B07); leitura em `src/pep/amplimed.ts` (B48). Escrita do SOAP no campo de evolução (B49), conferida na fixture; falta validar numa conta real |
+| D‑02 | Botão flutuante comentado | **Resolvido** | Volta só em página de PEP detectada (B52) |
+| D‑03 | `MODO_TESTE_SOZINHO = True` | **Resolvido** | Flag removida de `audio_service.py` |
+| D‑04 | Transcrição por `recognize_google` | **Mitigado** | Provedores Gemini áudio (B31) e Whisper/Groq (B32); `recognize_google` segue só no fallback antigo (`processador_voz.py`) |
+| D‑05 | `audioop` / Python 3.13 | Aberto | `audio_service.py` ainda importa `audioop`; suporte só a Python 3.11 e 3.12 |
+| D‑06 | Sessão Gemini recriada / SDK legado | **Resolvido** | `backend/llm` com `google-genai` (B41) |
+| D‑07 | Prompt misto com referências inventadas | Parcial | Prompt do SOAP novo em PT‑BR (B40); o do chat (`Co-Pilot_medico.txt`) ainda tem trechos em inglês |
+| D‑08 | Código morto | **Resolvido** | `worker.py`, `audio_listener.py`, `manifest_modified.json`, `patient_data.txt` e `Form/index.tsx` removidos (B14) |
+| D‑09 | Seed "João Silva" | **Resolvido** | Seed removido (B68) |
+| D‑10 | Banco JSON único, nome em claro | **Resolvido** | SQLAlchemy + Alembic (B19), repositórios (B20), migração do JSON (B21); nome cifrado (B26) |
+| D‑11 | Anonimização só de nomes | **Mitigado** | Regex (B25) + NER e mapa cifrado (B26), conteúdo da extensão anonimizado (B69); lacunas conhecidas listadas no teste do B47 |
+| D‑12 | Sem consentimento de gravação | Aberto | Só a tabela `consentimento` existe; sem rota nem tela (B28) |
+| D‑13 | Áudio temporário / transcrição no JSON | **Resolvido** | Partes de áudio apagadas após a transcrição e job de limpeza (B35); transcrição no banco (B19) |
+| D‑14 | API sem autenticação, CORS aberto | **Resolvido** | Token + perfil em todas as rotas, menos login, refresh, cadastro de médico, `health` e `openapi.json`; CORS com origens locais explícitas por padrão |
+| D‑15 | Content script em `<all_urls>` | **Resolvido** | `host_permissions` e content script só nos domínios dos PEPs (B51) |
+| D‑16 | Sem `.env.example` | **Resolvido** | `API/.env.example` (B12) |
+| D‑17 | Testes fora do CI | **Resolvido** | CI do backend e do front (B10, B11) e E2E (B56) |
+| D‑18 | `App.tsx` monolítico | **Resolvido** | 105 linhas; telas em `src/features/` (B17) |
+| D‑19 | Modelos Vosk no git | **Resolvido** | Fora do git; `scripts/download_models.py` (B13) |
+| D‑20 | Docs desatualizados | Parcial | Este documento e o README revistos em 09/11; tabela de rotas do doc 05 ainda diverge do código |
+| D‑21 | Repositórios dispersos | **Resolvido** | Repositório único |
+| D‑22, D‑23 | Instalação sem admin / 500 sem segredo | **Resolvido** | Bootstrap e segredo documentados (B67) |
+| D‑24 | Pacientes legados sem médico | **Resolvido** | `migrate_legacy_patients.py` (B68) |
+| D‑25, D‑26 | JWT artesanal / sem rate limit no login | **Resolvido** | PyJWT, refresh, política de senha, rate limit e lockout no login (B22) |
+| D‑27 | Token em `localStorage` na web | Aberto | `front/copmed-web/src/api.js` |
+| D‑28 | `background.js` com URL fixa | **Resolvido** | Lê a URL publicada pelo popup; `localhost:3001` só como padrão |
+| D‑29, D‑30 | CI e compose incompletos | **Resolvido** | B10, B11, B12 |
+| D‑31 | Telas placeholder na web | Aberto | Decidido removê-las (ADR‑10), mas `PlaceholderPage` ainda é usada em `App.jsx` |
+| D‑32 | `.pyc` rastreados | **Resolvido** | Nenhum `.pyc` no git |
+| D‑33 | `window.prompt`/`alert` na web | **Resolvido** | Não há mais chamadas |
+| D‑34 | XSS via `source_url` | **Resolvido** | Corrigido em 20/09 |
+
 ## 0. Atualização de 20/09/2026 — o que o Grupo 2 (2026.1, v4.0) mudou
 
 As seções 1–6 descrevem a v3.0 e foram mantidas como referência. Em 20/09/2026 o PO recebeu o fork `qleticia/copilot_medico_grupo_2_es` (24 commits, 05–14/07/2026) e sua documentação; a árvore final foi integrada em `develop` (commit "feat: integra o trabalho do Grupo 2"). Esta seção registra o que mudou em relação aos achados D‑01…D‑21 e lista os achados novos D‑22…D‑34. **A base de partida da v5.0 é esta.**
