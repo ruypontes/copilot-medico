@@ -80,6 +80,21 @@ export function useConsultationChat({
     [patientId, consultationId, loadConsultationHistory, setPatientId, setConsultationId]
   );
 
+  // Adota ids novos devolvidos pela API sem recarregar o historico (nao mexe em isLoading).
+  const adoptReturnedIds = useCallback(
+    (data: { patient_id?: string; consultation_id?: string }) => {
+      if (data.patient_id && data.patient_id !== patientId) {
+        setPatientId(data.patient_id);
+        chrome.storage.local.set({ patientId: data.patient_id });
+      }
+      if (data.consultation_id && data.consultation_id !== consultationId) {
+        setConsultationId(data.consultation_id);
+        chrome.storage.local.set({ consultationId: data.consultation_id });
+      }
+    },
+    [patientId, consultationId, setPatientId, setConsultationId]
+  );
+
   const handleSendMessage = useCallback(
     async (messageText: string) => {
       if (!messageText.trim() || !patientId || !consultationId) return;
@@ -100,21 +115,34 @@ export function useConsultationChat({
           consultation_id: consultationId,
         });
         if (data.status === "success") {
-          await syncAfterSuccess(data);
+          // B72: mostra a resposta assim que ela chega, sem recarregar o historico inteiro.
+          if (typeof data.ai_response === "string" && data.ai_response.trim()) {
+            setMessages((prevMessages) => [...prevMessages, botMessage(data.ai_response)]);
+            adoptReturnedIds(data);
+          } else {
+            await syncAfterSuccess(data);
+          }
         } else {
           setMessages((prevMessages) => [...prevMessages, botMessage(`Erro: ${data.message}`)]);
         }
       } catch (error: unknown) {
         console.error("Erro de rede:", error);
+        const isTimeout =
+          error instanceof DOMException &&
+          (error.name === "TimeoutError" || error.name === "AbortError");
         setMessages((prevMessages) => [
           ...prevMessages,
-          botMessage(`Erro de conexão: ${getErrorMessage(error, "Erro desconhecido")}`),
+          botMessage(
+            isTimeout
+              ? "A IA está demorando mais que o normal. A resposta continua sendo gerada e ficará salva no histórico desta consulta: reabra a consulta em instantes ou envie a pergunta de novo."
+              : `Erro de conexão: ${getErrorMessage(error, "Erro desconhecido")}`
+          ),
         ]);
       } finally {
         setIsLoading(false);
       }
     },
-    [patientId, consultationId, syncAfterSuccess]
+    [patientId, consultationId, syncAfterSuccess, adoptReturnedIds]
   );
 
   const handleUploadPdf = useCallback(
