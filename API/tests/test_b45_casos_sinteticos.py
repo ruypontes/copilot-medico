@@ -11,7 +11,8 @@ Responsabilidades vizinhas (para não confundir escopo):
 
 Verificações cobertas (numeradas como na descrição da issue):
     0. A pasta eval/cases existe e tem exatamente 20 arquivos caso-NN.json,
-       sem id duplicado.
+       e a pasta eval/cases-urgencia (B45b) tem exatamente 4 caso-uNN.json,
+       sem id duplicado entre as duas.
     1. Cada arquivo é JSON válido (falha apontando qual arquivo).
     2. Cada caso tem EXATAMENTE as 7 chaves esperadas — nem a mais, nem a menos.
     3. O campo "id" bate com o nome do arquivo (caso-07.json -> "caso-07").
@@ -47,6 +48,10 @@ from backend.anonimizacao.padroes import valida_cpf
 # ---------------------------------------------------------------------------
 
 CASES_DIR = Path(__file__).resolve().parent.parent / "eval" / "cases"
+# B45b: casos de urgência pedidos na revisão clínica (mesmo formato, pasta própria
+# para não alterar a contagem de 20 nem o padrão do run_eval).
+URGENCIA_DIR = Path(__file__).resolve().parent.parent / "eval" / "cases-urgencia"
+TOTAL_URGENCIA = 4
 
 CAMPOS_OBRIGATORIOS = frozenset(
     {
@@ -86,6 +91,14 @@ def _listar_casos() -> list[Path]:
     return sorted(CASES_DIR.glob("caso-[0-9][0-9].json"))
 
 
+def _listar_casos_urgencia() -> list[Path]:
+    """Lista os arquivos caso-uNN.json da B45b (vazio se a pasta não existir;
+    o teste de contagem é quem acusa a falta)."""
+    if not URGENCIA_DIR.is_dir():
+        return []
+    return sorted(URGENCIA_DIR.glob("caso-u[0-9][0-9].json"))
+
+
 def _carregar(caminho: Path) -> dict:
     """Carrega um caso. Erro de sintaxe aponta o arquivo exato (verificação 1)."""
     try:
@@ -98,7 +111,10 @@ def _carregar(caminho: Path) -> dict:
         )
 
 
-CASOS = _listar_casos()
+CASOS_ROTINA = _listar_casos()
+CASOS_URGENCIA = _listar_casos_urgencia()
+# As verificações 1 a 9 valem para os dois conjuntos.
+CASOS = CASOS_ROTINA + CASOS_URGENCIA
 IDS_PARAM = lambda p: p.stem  # noqa: E731 — id curto para o pytest
 
 
@@ -107,9 +123,17 @@ IDS_PARAM = lambda p: p.stem  # noqa: E731 — id curto para o pytest
 # ---------------------------------------------------------------------------
 
 def test_existem_exatamente_20_arquivos_caso_nn():
-    assert len(CASOS) == 20, (
+    assert len(CASOS_ROTINA) == 20, (
         f"Esperados 20 arquivos 'caso-NN.json' em {CASES_DIR}, "
-        f"encontrados {len(CASOS)}: {[c.name for c in CASOS]}"
+        f"encontrados {len(CASOS_ROTINA)}: {[c.name for c in CASOS_ROTINA]}"
+    )
+
+
+def test_existem_exatamente_4_casos_de_urgencia():
+    assert URGENCIA_DIR.is_dir(), f"A pasta {URGENCIA_DIR} não existe (B45b)."
+    assert len(CASOS_URGENCIA) == TOTAL_URGENCIA, (
+        f"Esperados {TOTAL_URGENCIA} arquivos 'caso-uNN.json' em {URGENCIA_DIR}, "
+        f"encontrados {len(CASOS_URGENCIA)}: {[c.name for c in CASOS_URGENCIA]}"
     )
 
 

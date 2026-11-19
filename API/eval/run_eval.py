@@ -71,6 +71,45 @@ class CasoInvalido(ValueError):
     """Arquivo de caso fora do formato de docs/09 secao 3.1."""
 
 
+_ROTULOS_MEDICO = {"medico", "médico", "medica", "médica", "dr", "dra"}
+
+
+def normalizar_caso_b45(caso):
+    """Converte um caso no formato da B45 (eval/cases, eval/cases-urgencia) para o formato do eval.
+
+    B45: transcricao em texto corrido ("Médico: ...
+Paciente: ..."), gabarito_soap, cid10_esperado,
+    pendencias e pii_plantada como objeto. Eval (docs/09 3.1): transcricao em turnos {papel, texto} e
+    gabarito {soap, cid10, pendencias_esperadas}. Casos ja no formato do eval passam intactos.
+    """
+    if not isinstance(caso, dict) or not isinstance(caso.get("transcricao"), str):
+        return caso
+    turnos = []
+    for linha in caso["transcricao"].splitlines():
+        linha = linha.strip()
+        if not linha:
+            continue
+        rotulo, sep, texto = linha.partition(":")
+        if sep and rotulo and len(rotulo) <= 30 and texto.strip():
+            chave = rotulo.strip().lower().rstrip(".")
+            papel = "medico" if chave in _ROTULOS_MEDICO else ("paciente" if chave == "paciente" else rotulo.strip())
+            turnos.append({"papel": papel, "texto": texto.strip()})
+        elif turnos:
+            turnos[-1]["texto"] += " " + linha
+    novo = {chave: valor for chave, valor in caso.items()
+            if chave not in ("transcricao", "gabarito_soap", "cid10_esperado", "pendencias", "pii_plantada")}
+    novo["transcricao"] = turnos
+    novo["gabarito"] = {
+        "soap": caso.get("gabarito_soap") or {},
+        "cid10": list(caso.get("cid10_esperado") or []),
+        "pendencias_esperadas": list(caso.get("pendencias") or []),
+    }
+    pii = caso.get("pii_plantada")
+    if isinstance(pii, dict):
+        novo["pii_plantada"] = [str(v) for valores in pii.values() for v in (valores if isinstance(valores, list) else [valores])]
+    return novo
+
+
 def validar_caso(caso, origem: str) -> None:
     if not isinstance(caso, dict):
         raise CasoInvalido(f"{origem}: o caso deve ser um objeto JSON")
@@ -113,6 +152,7 @@ def carregar_casos(pasta: Path, limite: int | None = None) -> list[dict]:
             caso = json.loads(arquivo.read_text(encoding="utf-8"))
         except json.JSONDecodeError as erro:
             raise CasoInvalido(f"{arquivo.name}: JSON malformado (linha {erro.lineno}, coluna {erro.colno})") from erro
+        caso = normalizar_caso_b45(caso)
         validar_caso(caso, arquivo.name)
         if caso["id"] in ids:
             raise CasoInvalido(f"{arquivo.name}: id duplicado '{caso['id']}'")

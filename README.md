@@ -41,6 +41,10 @@ O produto **funciona como demo**, mas não como ferramenta de uso diário: banco
 | 09 | [Qualidade, testes e avaliação](docs/09-qualidade-testes-avaliacao.md) | QA, devs |
 | 10 | [Riscos e decisões pendentes](docs/10-riscos-decisoes.md) | PO |
 | 12 | [Decisões do PO — 15/10/2026](docs/12-decisoes-po-2026-10-15.md) | Todos (resolve P1–P13 e fixa custeio em plataformas gratuitas) |
+| 13 | [Guia de instalação, manual do médico e consentimento](docs/13-guia-instalacao-e-manual.md) | Instaladores, médicos |
+| 14 | [Relatório do piloto](docs/14-relatorio-piloto.md) | PO, equipe |
+| 15 | [Entrega final v5.0: vídeos, relatório técnico e release](docs/15-entrega-final-v5.md) | Equipe |
+| — | [CHANGELOG](CHANGELOG.md) | Todos |
 | A | [Transcrições dos vídeos](docs/anexos/A-transcricoes-videos.md) | Referência |
 | B | [Inventário dos repositórios](docs/anexos/B-inventario-repositorios.md) | Referência |
 | C | [Documentação do Grupo 2 (2026.1)](docs/anexos/C-documentacao-grupo-2-2026-1.pdf) | Referência |
