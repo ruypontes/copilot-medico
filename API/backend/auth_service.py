@@ -525,6 +525,31 @@ def decode_access_token(token: str) -> dict[str, Any]:
         raise AuthError("Token invalido", 401) from exc
 
 
+def subject_of_expired_access_token(token: str | None) -> str | None:
+    """Dono (`sub`) de um access token nosso, mesmo que ja expirado.
+
+    Usado so para decidir se o cofre de cifra (B26) do token antigo pode
+    passar para o token novo no refresh. A assinatura e o tipo sao
+    conferidos; a expiracao nao, porque o caso normal do refresh e o
+    access token ja ter vencido. Qualquer falha devolve None.
+    """
+    if not token:
+        return None
+    try:
+        payload = pyjwt.decode(
+            token,
+            get_auth_secret(),
+            algorithms=["HS256"],
+            options={"verify_exp": False},
+        )
+    except Exception:
+        return None
+    if payload.get("type", "access") != "access":
+        return None
+    sub = payload.get("sub")
+    return str(sub) if sub else None
+
+
 def get_user_from_token(token: str) -> tuple[dict[str, Any], dict[str, Any]]:
     payload = decode_access_token(token)
     if payload.get("type", "access") != "access":

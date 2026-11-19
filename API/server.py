@@ -43,6 +43,7 @@ from backend.auth_service import (
     reject_doctor_request,
     reset_login_lockout,
     sanitize_user,
+    subject_of_expired_access_token,
     validate_user_profile_access,
 )
 from backend.config import settings
@@ -503,7 +504,7 @@ def refresh_token_route():
         return _json_error("refresh_token e obrigatorio.", 400)
 
     try:
-        token, expires_in, _user = exchange_refresh_token(refresh_token)
+        token, expires_in, user = exchange_refresh_token(refresh_token)
     except AuthError as exc:
         return _json_error(exc.message, exc.status_code)
 
@@ -512,8 +513,15 @@ def refresh_token_route():
     # antigo (mesmo expirado) no header Authorization, "mudamos" o cofre dele
     # para o token novo - sem isso, o medico perderia a cifra dos dados ate
     # logar de novo, so por ter renovado o access token.
+    # So migra se o token antigo tiver assinatura valida e for do MESMO
+    # medico do refresh token; senao quem tivesse o token de outro medico
+    # herdaria o mapa de pseudonimos dele.
     token_antigo = _token_da_requisicao()
-    if token_antigo and token_antigo != token:
+    if (
+        token_antigo
+        and token_antigo != token
+        and subject_of_expired_access_token(token_antigo) == str(user.get("id"))
+    ):
         cofre = anonimizacao_servico.cofre_da_sessao(token_antigo)
         if cofre is not None:
             anonimizacao_servico.registrar_sessao(token, cofre)

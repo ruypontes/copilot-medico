@@ -176,6 +176,71 @@ class TestRotaDeRefresh:
         if token_novo != token_antigo:
             assert anonimizacao_servico.cofre_da_sessao(token_antigo) is None
 
+    def test_refresh_nao_transfere_cofre_de_outro_medico(self, client, users_db):
+        # Seguranca: o token antigo do header nao era validado. Quem tivesse
+        # o access token de outro medico podia mandar o proprio refresh token
+        # com o token alheio no header e "herdar" o cofre (mapa de
+        # pseudonimos) dele, revertendo a anonimizacao dos pacientes.
+        _register_and_approve_doctor(users_db, email="dra.a@example.com")
+        _register_and_approve_doctor(users_db, email="dr.b@example.com")
+        token_a = _login(client, email="dra.a@example.com").get_json()["token"]
+        refresh_b = _login(client, email="dr.b@example.com").get_json()["refresh_token"]
+        cofre_a = anonimizacao_servico.cofre_da_sessao(token_a)
+        assert cofre_a is not None
+
+        response = client.post(
+            "/api/auth/refresh",
+            json={"refresh_token": refresh_b},
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+        assert response.status_code == 200
+        token_novo_b = response.get_json()["token"]
+
+        assert anonimizacao_servico.cofre_da_sessao(token_novo_b) is not cofre_a
+        assert anonimizacao_servico.cofre_da_sessao(token_a) is cofre_a
+
+    def test_refresh_nao_transfere_cofre_com_token_forjado(self, client, users_db):
+        _register_and_approve_doctor(users_db)
+        login_body = _login(client).get_json()
+        cofre = anonimizacao_servico.cofre_da_sessao(login_body["token"])
+        forjado = jwt.decode(
+            login_body["token"], auth_service.settings.auth_secret_key, algorithms=["HS256"]
+        )
+        token_forjado = jwt.encode(forjado, "outra-chave", algorithm="HS256")
+        # O cofre passa a existir so sob o token forjado.
+        anonimizacao_servico.encerrar_sessao(login_body["token"])
+        anonimizacao_servico.registrar_sessao(token_forjado, cofre)
+
+        response = client.post(
+            "/api/auth/refresh",
+            json={"refresh_token": login_body["refresh_token"]},
+            headers={"Authorization": f"Bearer {token_forjado}"},
+        )
+        assert response.status_code == 200
+        assert anonimizacao_servico.cofre_da_sessao(response.get_json()["token"]) is None
+
+    def test_refresh_aceita_token_antigo_expirado_do_mesmo_medico(self, client, users_db, monkeypatch):
+        # O caso normal do refresh e justamente o access token ja ter
+        # expirado: a assinatura e o dono sao conferidos, a validade nao.
+        _register_and_approve_doctor(users_db)
+        login_body = _login(client).get_json()
+        cofre = anonimizacao_servico.cofre_da_sessao(login_body["token"])
+        payload = jwt.decode(
+            login_body["token"], auth_service.settings.auth_secret_key, algorithms=["HS256"]
+        )
+        payload["exp"] = payload["iat"] - 1
+        token_expirado = jwt.encode(payload, auth_service.settings.auth_secret_key, algorithm="HS256")
+        anonimizacao_servico.encerrar_sessao(login_body["token"])
+        anonimizacao_servico.registrar_sessao(token_expirado, cofre)
+
+        response = client.post(
+            "/api/auth/refresh",
+            json={"refresh_token": login_body["refresh_token"]},
+            headers={"Authorization": f"Bearer {token_expirado}"},
+        )
+        assert response.status_code == 200
+        assert anonimizacao_servico.cofre_da_sessao(response.get_json()["token"]) is cofre
+
 
 class TestPoliticaDeSenha:
     def test_cadastro_rejeita_senha_curta(self, client, users_db):
