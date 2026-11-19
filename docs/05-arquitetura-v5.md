@@ -237,6 +237,7 @@ Formato curto. Cada ADR ganha um arquivo em `docs/adr/` no repositório quando a
 **Contexto:** D‑04; qualidade da API gratuita é imprevisível; Vosk small‑pt tem WER alto.
 **Decisão:** interface `TranscriptionProvider`; implementação padrão **Gemini áudio** (já é a API contratada; devolve transcrição com marcação de falantes em uma chamada); alternativa **Whisper large‑v3 via Groq**; **Vosk local** como fallback offline (com aviso de qualidade). Diarização: papéis atribuídos pelo provedor quando disponível, senão pela heurística de vetor de voz já existente (com `MODO_TESTE_SOZINHO` removido).
 **Decidido pelo cliente em 15/09/2026:** Gemini áudio é o provedor padrão; Whisper/Groq fica como comparação opcional no eval. Quem paga a chave segue pendente (P2, doc 10).
+**Atualização 09–15/11/2026 (PO):** o padrão passou a ser **Whisper large‑v3 via Groq** (plano gratuito, menor latência no piloto); Gemini áudio fica como alternativa com marcação de falantes e Vosk como fallback local. No LLM, **Claude Haiku 5.5** é o padrão com chave fornecida pelo PO (exceção à política de custeio, `docs/12` §4) e Gemini é a reserva automática (`ProvedorComReserva`).
 
 ### ADR‑05 — SOAP como saída estruturada validada
 **Contexto:** hoje a saída é markdown livre com formato instável.

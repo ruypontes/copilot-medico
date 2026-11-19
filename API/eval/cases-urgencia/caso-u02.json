@@ -1,0 +1,27 @@
+{
+  "id": "caso-u02",
+  "queixa_principal": "Gestante de 34 semanas com dor de cabeça forte",
+  "transcricao": "Médico: Boa tarde! Como a senhora está?\nPaciente: Boa tarde, doutor. Estou com uma dor de cabeça muito forte desde de manhã, que não passa com nada. Estou de trinta e quatro semanas.\nMédico: É a primeira gravidez?\nPaciente: É a segunda. Tenho uma filha de quatro anos, foi parto normal, sem problema.\nMédico: Está vendo alguma coisa diferente? Pontinhos, luzes, vista embaçada?\nPaciente: Estou vendo uns pontinhos brilhando, desde o meio-dia.\nMédico: Dor na boca do estômago ou do lado direito da barriga?\nPaciente: Uma dor aqui na boca do estômago, sim.\nMédico: Inchaço?\nPaciente: O rosto e as mãos incharam muito essa semana.\nMédico: Sangramento, perda de líquido, contração? O bebê está mexendo?\nPaciente: Não, nada disso. Está mexendo.\nMédico: A pressão estava normal no pré-natal?\nPaciente: Na última consulta, há três semanas, estava doze por oito.\nMédico: Tem alguma doença, alergia?\nPaciente: Não, nada.\nMédico: Vou examinar a senhora. [exame físico] Pressão 160 por 110. [após quinze minutos] Repetindo, 162 por 112. Edema de face e mãos, edema de pernas mais dois cruzes. Reflexos patelares vivos. Altura uterina 33 centímetros, batimentos do bebê 140. Fita de urina com proteína mais dois cruzes.\nMédico: Dona Priscila, a senhora está com pré-eclâmpsia grave, com sinais de que pode evoluir para convulsão. A senhora vai ficar aqui e eu já vou chamar o SAMU para levar a senhora para a maternidade de alto risco. Enquanto isso, vou dar o sulfato de magnésio para proteger contra convulsão, quatro gramas na veia, devagar, e dez gramas no músculo, cinco em cada lado, e um comprimido de nifedipina de dez miligramas para baixar a pressão. A enfermeira vai ficar com a senhora, medindo a pressão e a respiração.\nPaciente: Meu Deus, doutor. Está bem.\nMédico: Vou confirmar seus dados. Nome completo?\nPaciente: Priscila Gomes da Silva.\nMédico: Data de nascimento?\nPaciente: 21/08/1999.\nMédico: CPF?\nPaciente: 615.027.384-90.\nMédico: Telefone?\nPaciente: (81) 99654-3210.\nMédico: E-mail?\nPaciente: priscila.gomes@email.com.\nMédico: Endereço?\nPaciente: Rua Arraial, 310, Tamarineira, Recife-PE, CEP 52051-380.",
+  "gabarito_soap": {
+    "subjetivo": "Gestante, 27 anos, G2P1 (parto normal anterior sem intercorrências), 34 semanas, refere cefaleia intensa desde a manhã, refratária, escotomas cintilantes desde o meio-dia, dor epigástrica e edema importante de face e mãos na última semana. Nega sangramento, perda de líquido e contrações; movimentos fetais presentes. PA de 120/80 mmHg há 3 semanas. Nega comorbidades e alergias.",
+    "objetivo": "PA 160/110 mmHg e 162/112 mmHg após 15 minutos. Edema de face e mãos; edema de membros inferiores 2+. Reflexos patelares vivos. Altura uterina 33 cm, BCF 140 bpm. Fita urinária com proteinúria 2+.",
+    "avaliacao": "Pré-eclâmpsia grave com sinais de iminência de eclâmpsia (cefaleia, escotomas e epigastralgia) — CID-10 O14.1, em gestante de 34 semanas. Emergência obstétrica: risco de eclâmpsia e de síndrome HELLP.",
+    "plano": "1. Acionado o SAMU para transferência imediata à maternidade de alto risco. 2. Sulfato de magnésio (esquema de Pritchard): 4 g IV lento + 10 g IM (5 g em cada glúteo). 3. Nifedipina 10 mg VO. 4. Paciente em observação na UBS com a enfermagem, monitorando PA e frequência respiratória até a remoção."
+  },
+  "cid10_esperado": ["O14.1"],
+  "pendencias": [
+    "Durante o sulfato de magnésio: monitorar reflexo patelar, frequência respiratória e diurese; manter gluconato de cálcio a 10 % disponível como antídoto.",
+    "Encaminhar com relatório: horário e doses do sulfato e da nifedipina, PAs aferidas e proteinúria de fita.",
+    "Exames para HELLP (hemograma com plaquetas, TGO/TGP, LDH, creatinina) a cargo da maternidade.",
+    "Repetir a PA a cada 15 minutos; se a PA se mantiver igual ou acima de 160/110, nova dose de nifedipina conforme protocolo."
+  ],
+  "pii_plantada": {
+    "nome_completo": ["Priscila Gomes da Silva", "Dona Priscila"],
+    "data_nascimento": ["21/08/1999"],
+    "cpf": ["615.027.384-90"],
+    "telefone": ["(81) 99654-3210"],
+    "email": ["priscila.gomes@email.com"],
+    "endereco": ["Rua Arraial, 310, Tamarineira, Recife-PE, CEP 52051-380"],
+    "cep": ["52051-380"]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "id": "caso-u03",
+  "queixa_principal": "Criança com diarreia e vômitos, muito sonolenta",
+  "transcricao": "Médico: Boa tarde! O que houve com ele?\nMãe: Boa tarde, doutor. Ele está com diarreia há três dias, mais de dez vezes por dia, bem aguada. Desde ontem vomita tudo, não para nada no estômago.\nMédico: Tem sangue nas fezes?\nMãe: Não.\nMédico: Febre?\nMãe: Teve febre no primeiro dia, depois não.\nMédico: Quando foi a última vez que ele fez xixi?\nMãe: Desde ontem à noite não molha a fralda.\nMédico: Ele está aceitando água, soro?\nMãe: Não aceita mais nada. E está muito molinho, só quer dormir, não chora mais.\nMédico: Qual a idade dele? Tem alguma doença?\nMãe: Um ano e meio. É saudável, vacinas em dia. Pesava dez quilos e oitocentos no mês passado.\nMédico: Vou examinar. [exame físico] Peso hoje 9,8 quilos. Letárgico, desperta com dificuldade. Olhos muito fundos, chora sem lágrima, boca muito seca. Sinal da prega desaparece muito lentamente, mais de dois segundos. Pulso fino e rápido, frequência cardíaca 170. Enchimento capilar de quatro segundos. Mãos frias. Abdome distendido, ruídos aumentados.\nMédico: Dona Jéssica, o Davi está com desidratação grave, já com sinais de choque. Ele precisa de soro na veia agora. Vamos pegar a veia aqui e começar soro fisiológico, vinte mililitros por quilo, rápido, e eu vou repetir conforme a resposta. Já estou chamando o SAMU para levar ele para o hospital, porque ele vai precisar continuar a hidratação e ficar internado em observação. Não vamos dar nada pela boca enquanto ele estiver tão sonolento.\nMãe: Pelo amor de Deus, doutor. Está bem.\nMédico: Vou confirmar os dados. Nome da senhora?\nMãe: Jéssica Ferreira Nunes.\nMédico: Data de nascimento da senhora?\nMãe: 14/02/2001.\nMédico: CPF da senhora?\nMãe: 390.718.462-96.\nMédico: Telefone?\nMãe: (81) 98876-1122.\nMédico: Endereço?\nMãe: Travessa São Miguel, 12, Afogados, Recife-PE, CEP 50770-450.\nMédico: E o nome completo dele?\nMãe: Davi Lucas Ferreira Nunes.",
+  "gabarito_soap": {
+    "subjetivo": "Criança do sexo masculino, 1 ano e 6 meses, trazida pela mãe com diarreia aquosa há 3 dias (mais de 10 evacuações/dia), sem sangue, e vômitos incoercíveis desde o dia anterior. Febre apenas no primeiro dia. Sem diurese desde a noite anterior. Não aceita líquidos. Muito sonolento, sem chorar. Previamente hígido, vacinas em dia. Peso de 10,8 kg há 1 mês.",
+    "objetivo": "Peso 9,8 kg (perda de cerca de 1 kg, aproximadamente 9 %). Letárgico, desperta com dificuldade. Olhos muito fundos, choro sem lágrimas, mucosas muito secas. Sinal da prega desaparece muito lentamente (mais de 2 s). Pulso fino e rápido, FC 170 bpm, enchimento capilar de 4 s, extremidades frias. Abdome distendido, ruídos aumentados.",
+    "avaliacao": "Diarreia aguda com desidratação grave e sinais de choque hipovolêmico — CID-10 A09 (com depleção de volume, E86). Indicação de Plano C do Ministério da Saúde.",
+    "plano": "1. Plano C: acesso venoso e soro fisiológico 0,9 % 20 mL/kg em bolus rápido, repetido conforme a resposta clínica. 2. Nada por via oral enquanto letárgico. 3. Acionado o SAMU para transferência ao hospital, para continuidade da hidratação venosa e internação."
+  },
+  "cid10_esperado": ["A09"],
+  "pendencias": [
+    "Reavaliar perfusão, frequência cardíaca, nível de consciência e diurese após cada bolus; registrar volumes e horários no relatório de transferência.",
+    "Glicemia capilar não aferida — criança letárgica pode ter hipoglicemia associada.",
+    "Iniciar SRO assim que a criança conseguir beber (cerca de 5 mL/kg/h) e retomar a alimentação após a hidratação; suplementar zinco por 10 a 14 dias.",
+    "Se não for possível acesso venoso, considerar via intraóssea."
+  ],
+  "pii_plantada": {
+    "nome_completo": ["Jéssica Ferreira Nunes", "Davi Lucas Ferreira Nunes", "Dona Jéssica", "Davi"],
+    "data_nascimento": ["14/02/2001"],
+    "cpf": ["390.718.462-96"],
+    "telefone": ["(81) 98876-1122"],
+    "endereco": ["Travessa São Miguel, 12, Afogados, Recife-PE, CEP 50770-450"],
+    "cep": ["50770-450"]
+  }
+}

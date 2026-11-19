@@ -42,6 +42,21 @@ Todas as decisões abaixo foram tomadas pelo PO em **[docs/12-decisoes-po-2026-1
 
 ## Próximo ciclo (registrar desde já)
 
+### Herança da v5.0 (prioridade para o ciclo 6, 2027.1)
+
+| Prioridade | Item | Origem |
+|---|---|---|
+| 1 | Resposta da IA em tempo real (fim do "digitando" preso) | B72, #105 |
+| 2 | Tela de consentimento e registro na consulta | B28, #28 |
+| 3 | Modo automático opcional: parar gravação → SOAP pronto para revisar | B71, #107 |
+| 4 | Piloto completo: 2 médicos × 10 consultas, SUS e relatório | B58/B59 |
+| 5 | `run_eval.py` v2: CID‑10, alucinação, alertas dos casos de urgência | B57 |
+| 6 | Exportação PDF/Markdown do SOAP | B55 |
+| 7 | Hardening e revisão de segurança antes de qualquer dado real | B63, docs/08 §5 |
+| 8 | Deploy gratuito do backend (Render) e publicação na Chrome Web Store | chat da equipe, 11/2026 |
+
+### Ideias para ciclos futuros
+
 - Receitas e atestados com validade legal (assinatura ICP‑Brasil, integração com prescrição eletrônica).
 - Terceiro e quarto PEP (iClinic, Tasy) pelo padrão de adaptador.
 - Whisper local em GPU para eliminar envio de áudio.

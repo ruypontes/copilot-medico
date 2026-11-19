@@ -681,3 +681,41 @@ def test_cli_estrito_falha_se_algum_caso_ficou_sem_resposta(tmp_path, monkeypatc
 
 def test_cli_estrito_passa_quando_tudo_esta_na_meta(tmp_path):
     assert ev.main(["--casos", str(CASOS), "--saida", str(tmp_path), "--data", "2026-10-16", "--estrito"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# B45/B45b: os casos oficiais (texto corrido) entram no eval pelo adaptador
+# ---------------------------------------------------------------------------
+
+EVAL_DIR_REAL = Path(__file__).resolve().parent.parent / "eval"
+
+
+def test_normalizar_caso_b45_converte_texto_em_turnos_e_gabarito():
+    caso = {
+        "id": "caso-x",
+        "queixa_principal": "Febre",
+        "transcricao": "Médico: Bom dia!\nPaciente: Estou com febre.\ncontinuação da fala\nMãe: Ele não come.",
+        "gabarito_soap": {"subjetivo": "s", "objetivo": "o", "avaliacao": "a", "plano": "p"},
+        "cid10_esperado": ["R50.9"],
+        "pendencias": ["ALERTA: notificar"],
+        "pii_plantada": {"cpf": ["12345678909"], "nome_completo": ["Fulano"]},
+    }
+    novo = ev.normalizar_caso_b45(caso)
+    ev.validar_caso(novo, "caso-x.json")
+    assert [t["papel"] for t in novo["transcricao"]] == ["medico", "paciente", "Mãe"]
+    assert novo["transcricao"][1]["texto"] == "Estou com febre. continuação da fala"
+    assert novo["gabarito"]["cid10"] == ["R50.9"]
+    assert novo["gabarito"]["pendencias_esperadas"] == ["ALERTA: notificar"]
+    assert sorted(novo["pii_plantada"]) == ["12345678909", "Fulano"]
+
+
+def test_caso_no_formato_do_eval_passa_intacto():
+    caso = {"id": "y", "transcricao": [{"papel": "medico", "texto": "oi"}]}
+    assert ev.normalizar_caso_b45(caso) is caso
+
+
+@pytest.mark.parametrize("pasta,quantidade", [("cases", 20), ("cases-urgencia", 4)])
+def test_casos_oficiais_carregam_no_eval(pasta, quantidade):
+    casos = ev.carregar_casos(EVAL_DIR_REAL / pasta)
+    assert len(casos) == quantidade
+    assert all(len(c["transcricao"]) >= 4 for c in casos)
