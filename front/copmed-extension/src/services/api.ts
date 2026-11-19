@@ -262,10 +262,16 @@ export function getConsultationHistory(patientId: string, consultationId: string
   );
 }
 
-export function sendChatMessage(payload: Record<string, unknown>) {
+// Tempo maximo de espera pela resposta do chat (B72). Sem limite, um provedor lento
+// (ou o retry + reserva do backend) deixava a extensao presa em "digitando".
+// O backend continua processando e grava a resposta no historico mesmo apos o timeout.
+export const CHAT_TIMEOUT_MS = 90_000;
+
+export function sendChatMessage(payload: Record<string, unknown>, timeoutMs = CHAT_TIMEOUT_MS) {
   return apiRequest("/api/chat", {
     method: "POST",
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 
