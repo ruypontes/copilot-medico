@@ -1,0 +1,21 @@
+{
+  "v": 5,
+  "createdOnFiles": {"v": 1, "at": "2026-11-20T12:00:00Z"},
+  "lists": "css",
+  "format": {"v": 1, "shared": ["project/deck.css"]},
+  "title": "CoPilot Médico — Modelo Econômico",
+  "cover": "cover",
+  "order": ["cover", "tese", "dor", "mercado", "concorrentes", "modelos", "b2c", "b2b", "b2g", "unit", "recomendado", "projecao", "regulatorio", "roteiro", "fontes"],
+  "sections": {
+    "s1": {"description": "Tese: vender primeiro para a atenção primária do SUS.", "start": "cover"},
+    "s2": {"description": "Estudo de mercado: dor, tamanho e concorrentes.", "start": "dor"},
+    "s3": {"description": "Os três modelos econômicos: B2C, B2B e B2G.", "start": "modelos"},
+    "s4": {"description": "Modelo recomendado, projeção, riscos e roteiro.", "start": "recomendado"},
+    "s5": {"description": "Fontes e premissas.", "start": "fontes"}
+  },
+  "faces": {
+    "space-grotesk": {"family": "Space Grotesk", "href": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Inter:wght@400;600&display=swap"},
+    "inter": {"family": "Inter", "href": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Inter:wght@400;600&display=swap"}
+  },
+  "designSystems": []
+}
