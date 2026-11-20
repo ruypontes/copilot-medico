@@ -1,6 +1,6 @@
 # 16 — Modelo econômico: B2C, B2B e B2G
 
-*Preparado pelo PO em 20/11/2026. Apresentação: <https://claude.ai/artifact/P7uEbmXFH7sq3iyJ7qHy1P> (privada; peça acesso ao PO). Preços, margens e projeção são propostas e estimativas do PO; os dados de mercado têm fonte na seção 8.*
+*Preparado pelo PO em 20/11/2026. Apresentação: <https://claude.ai/artifact/P7uEbmXFH7sq3iyJ7qHy1P> (privada; peça acesso ao PO). Preços, margens e projeção são propostas e estimativas do PO; os dados de mercado têm fonte na seção 8. Pesquisa completa com links: `anexos/D-pesquisa-mercado-2026-11.md`. Texto e fontes dos slides: `anexos/E-apresentacao-modelo-economico.md`.*
 
 ## 1. Recomendação
 
